@@ -50,4 +50,4 @@ __pycache__/
 *.egg-info/
 
 # ---------- Misc generated assets ----------
-launcher_raw.png
+assets/launcher_raw.png

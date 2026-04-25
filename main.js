@@ -5,7 +5,7 @@ const os = require('os')
 const { execSync, exec } = require('child_process')
 
 let charWin, sideWin, launchWin
-const PS = path.join(__dirname, 'get_windows.ps1')
+const PS = path.join(__dirname, 'scripts', 'get_windows.ps1')
 const CHAR_W = 84, CHAR_H = 115            // sprite pixel size — used for visual centering math
 const CHAR_WIN_W = 240, CHAR_WIN_H = 140   // window box: room for sprite at left + bubble at right
 const LAUNCH_W = 120, LAUNCH_H = 120
@@ -301,7 +301,7 @@ function createWindows() {
     show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   })
-  sideWin.loadFile('sidebar.html')
+  sideWin.loadFile('renderer/sidebar.html')
   sideWin.setAlwaysOnTop(true, 'floating')
 
   charWin = new BrowserWindow({
@@ -312,7 +312,7 @@ function createWindows() {
     skipTaskbar: true, hasShadow: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   })
-  charWin.loadFile('character.html')
+  charWin.loadFile('renderer/character.html')
   charWin.setAlwaysOnTop(true, 'screen-saver')
 
   // -- Launcher (floating summon icon) --
@@ -332,7 +332,7 @@ function createWindows() {
     skipTaskbar: true, hasShadow: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   })
-  launchWin.loadFile('launcher.html')
+  launchWin.loadFile('renderer/launcher.html')
   launchWin.setAlwaysOnTop(true, 'screen-saver')
 
   // Sync sidebar visibility into launcher icon
@@ -354,7 +354,7 @@ function createWindows() {
     focusable: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   })
-  helperWin.loadFile('helper.html')
+  helperWin.loadFile('renderer/helper.html')
   helperWin.setAlwaysOnTop(true, 'screen-saver')
   helperWin.on('blur', () => { if (alive(helperWin) && helperWin.isVisible()) helperWin.hide() })
 
@@ -370,7 +370,7 @@ function createWindows() {
     focusable: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   })
-  pomodoroWin.loadFile('pomodoro.html')
+  pomodoroWin.loadFile('renderer/pomodoro.html')
   pomodoroWin.setAlwaysOnTop(true, 'screen-saver')
 }
 
@@ -876,7 +876,7 @@ ipcMain.on('open-folder', (e, folderPath) => {
 ipcMain.on('open-manual', () => {
   const candidates = [
     path.join(path.dirname(process.execPath), '使用说明书.md'),
-    path.join(__dirname, '使用说明书.md')
+    path.join(__dirname, 'docs', '使用说明书.md')
   ]
   const found = candidates.find(p => { try { return fs.existsSync(p) } catch { return false } })
   if (found) {

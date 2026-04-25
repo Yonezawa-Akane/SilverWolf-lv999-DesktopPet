@@ -6,7 +6,7 @@
   "author": "Fan Project",
   "scripts": {
     "start": "electron .",
-    "build": "electron-packager . SilverWolfPet --platform=win32 --arch=x64 --out=dist --overwrite --icon=icon.ico --electron-version=28.3.3 --ignore=node_modules --ignore=dist --ignore=gen_icon.py --ignore=build.bat --ignore=^/\\.claude --ignore=^/launcher_raw\\.png$ --ignore=^/process_launcher_icon\\.py$ --ignore=^/sw_side\\.png$ --ignore=^/sw_sprite\\.png$ --ignore=^/sw_sprite_flip\\.png$ --ignore=^/silver-wolf-skill-distilled\\.md$"
+    "build": "electron-packager . SilverWolfPet --platform=win32 --arch=x64 --out=dist --overwrite --icon=assets/icon.ico --electron-version=28.3.3 --ignore=node_modules --ignore=dist --ignore=^/scripts --ignore=^/docs --ignore=^/build\\.bat$ --ignore=^/\\.claude --ignore=^/assets/launcher_raw\\.png$ --ignore=^/assets/sw_side\\.png$ --ignore=^/assets/sw_sprite\\.png$ --ignore=^/assets/sw_sprite_flip\\.png$"
   },
   "devDependencies": {
     "electron": "^28.3.3",

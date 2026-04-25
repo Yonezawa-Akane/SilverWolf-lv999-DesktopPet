@@ -33,7 +33,7 @@ def build():
         sw = 0 if w==256 else w
         ents += struct.pack('<BBBBHHII',sw,sw,0,0,1,32,len(data),off)
         off += len(data); blobs += data
-    with open('icon.ico','wb') as f: f.write(hdr+ents+blobs)
-    print(f"icon.ico ok ({len(imgs)} sizes)")
+    with open('assets/icon.ico','wb') as f: f.write(hdr+ents+blobs)
+    print(f"assets/icon.ico ok ({len(imgs)} sizes)")
 
 if __name__=='__main__': build()
