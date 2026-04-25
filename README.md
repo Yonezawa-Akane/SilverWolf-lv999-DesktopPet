@@ -2,34 +2,122 @@
 
 > ⚠️ **Fan Project Disclaimer / 粉丝项目免责声明**
 >
-> This is an **unofficial, non-commercial fan project**. It is **NOT** affiliated with, endorsed by, or sponsored by **miHoYo / HoYoverse / Cognosphere**.
-> The character "Silver Wolf (银狼)" and all related artwork, names, and trademarks from *Honkai: Star Rail* (《崩坏：星穹铁道》) are the intellectual property of **miHoYo Co., Ltd. / HoYoverse**. All character rights belong to their respective owners.
-> Image assets in this repo (`sw_*.png` etc.) are included under fair-use for non-commercial fan work. If you are a rights holder and want them removed, please open an issue — they will be taken down promptly.
-> 本项目为**非营利的粉丝二创**，与米哈游 / HoYoverse 无任何关联，亦未获得其授权或背书。"银狼"角色及相关美术、名称、商标版权均归米哈游所有。如版权方希望移除相关素材，请开 issue，会立即处理。
+> 本项目为**非营利的粉丝二创**，与米哈游 / HoYoverse / Cognosphere **无任何关联**，亦未获得其授权或背书。"银狼"角色及《崩坏：星穹铁道》相关美术、名称、商标版权均归 **米哈游 (miHoYo Co., Ltd. / HoYoverse)** 所有。仓库内 `assets/sw_*.png` 等素材依据非营利合理使用原则收录，如版权方希望移除，请开 issue，会立即处理。
+>
+> This is an **unofficial, non-commercial fan project**. It is **NOT** affiliated with, endorsed by, or sponsored by **miHoYo / HoYoverse / Cognosphere**. The character "Silver Wolf (银狼)" and all related artwork, names, and trademarks from *Honkai: Star Rail* are the intellectual property of **miHoYo Co., Ltd. / HoYoverse**. Image assets in this repo (`assets/sw_*.png` etc.) are included under fair-use for non-commercial fan work. If you are a rights holder and want them removed, please open an issue — they will be taken down promptly.
+
+**语言 / Language**: [简体中文](#-中文文档) | [English](#-english-documentation)
+
+---
+
+## 🇨🇳 中文文档
+
+### 简介
+
+银狼主题的 Windows AI 桌面伴侣 —— 基于 Electron + Anthropic Claude 打造。
+
+一只能浮在桌面上的小狼，有完整的角色人格、屏幕感知能力、跨会话记忆、番茄钟、应用启动器，以及一堆星穹铁道风的悬浮面板。
+
+### 功能特性
+
+- **银狼角色**（崩坏：星穹铁道）—— 完整人格通过 skill 蒸馏注入，吊儿郎当三屏并行的骇客味儿
+- **长期记忆**横跨多次会话：facts / 每日总结 / 180 天对话归档 / 跨日主动问候
+- **全局截屏热键** `Ctrl+Shift+\` —— 5 种分析模式：解释 / 翻译 / 调试 / OCR / 总结
+- **番茄钟** —— 屏幕右上悬浮倒计时面板，阶段切换由银狼语音化播报
+- **应用启动器** —— 五级回退策略（开始菜单 → 桌面快捷方式 → 桌面模糊匹配 → 开始菜单模糊匹配 → 卸载注册表），常见 Windows 安装下命中率 ~95%
+- **中英应用别名互通**（微信 ↔ WeChat / QQ音乐 ↔ QQMusic 等）
+- **个人任务清单** —— AI 工具同步：银狼可以通过工具新增/完成/列出任务，也保留手动 UI
+- **三栏侧边栏**：聊天 / 任务 / 内置使用手册
+- **星穹铁道风悬浮面板**：六边形启动按钮 / 截屏洞察 HUD / 番茄钟覆层
+
+### 系统要求
+
+- Windows 10 / 11（x64）
+- Node.js 18+（仅源码构建需要）
+- Anthropic API Key（`sk-ant-...`）—— 用户自备，不内置
+
+### 安装与构建
+
+```bash
+npm install
+build.bat
+```
+
+产物：`dist/SilverWolfPet-vX.X.X-win-x64.zip`
+
+zip 内含解压即用的 Electron 应用 + 中文使用手册（`快速开始.txt` + `使用说明书.md`）。最终用户解压后双击 `SilverWolfPet.exe` 即可启动，无需装 Node。
+
+### 项目结构
+
+```
+.
+├── main.js                          Electron 主进程
+├── preload.js                       contextBridge：把 IPC 暴露给各 renderer
+├── package.json / build.bat         构建入口
+│
+├── renderer/                        5 个窗口 HTML
+│   ├── sidebar.html                 主聊天 UI + 三栏（聊天/任务/手册），Claude agentic 循环
+│   ├── character.html               84×115 精灵动画 + 情绪化对话泡（240×140 透明窗口）
+│   ├── launcher.html                控制侧边栏开关的六边形悬浮按钮
+│   ├── helper.html                  截屏洞察模态框（5 模式 + 星穹铁道菜单风）
+│   └── pomodoro.html                屏幕右上的番茄钟倒计时浮窗
+│
+├── assets/                          美术资源 / 图标
+│   ├── icon.ico                     应用图标
+│   ├── sw_sheet.png                 character.html 用的 sprite sheet
+│   ├── sw_side.png / sw_sprite*.png 美术原稿（不打包进 release）
+│   ├── launcher_icon.png            launcher.html 用的图标
+│   └── launcher_raw.png             launcher 图标原稿（gitignore）
+│
+├── scripts/                         构建/开发辅助
+│   ├── get_windows.ps1              主进程通过 IPC 调用，枚举前台窗口
+│   ├── gen_icon.py                  生成 assets/icon.ico
+│   ├── process_launcher_icon.py     从 launcher_raw 生成 launcher_icon
+│   └── init_and_push.bat            一次性 git init + push
+│
+└── docs/
+    ├── 使用说明书.md                  build.bat 拷入 release，由"打开手册"按钮调起
+    ├── 快速开始.txt                   build.bat 拷入 release
+    └── silver-wolf-skill-distilled.md sidebar.html 中 SW_PERSONA 常量的同步源
+```
+
+运行时状态持久化到 `%APPDATA%\silver-wolf-pet\state.json`。
+
+### 许可证
+
+MIT 许可证。详见 [LICENSE](./LICENSE)。
+
+代码原作以 MIT 协议开源。**角色 IP 版权归米哈游所有**，MIT 协议不授予角色相关的任何 IP 权利。
+
+---
+
+## 🇬🇧 English Documentation
+
+### Overview
 
 Silver Wolf-themed AI desktop companion for Windows. Built on Electron + Anthropic Claude.
 
-A floating desktop pet with personality, screen-aware shortcuts, conversation memory, and pomodoro support.
+A floating desktop pet with full character persona, screen-aware shortcuts, cross-session memory, pomodoro timer, app launcher, and a stack of HSR-styled floating panels.
 
-## Features
+### Features
 
-- **银狼 character** (Honkai: Star Rail) with full persona injected via skill distillation
+- **银狼 character** (Honkai: Star Rail) — full persona injected via skill distillation; the sardonic, multi-monitor hacker vibe
 - **Long-term memory** across sessions: facts / daily summaries / 180-day conversation archive / proactive cross-day greeting
-- **Global screenshot hotkey** (Ctrl+Shift+\\) with 5 analysis modes: explain / translate / debug / OCR / summarize
+- **Global screenshot hotkey** (`Ctrl+Shift+\`) with 5 analysis modes: explain / translate / debug / OCR / summarize
 - **Pomodoro** with floating top-right countdown panel and Silver-Wolf-voiced phase transitions
-- **App launching** with 5-tier fallback strategy (StartMenu → Desktop .lnk → Desktop contains → StartMenu contains → Uninstall registry) hitting ~95% on typical Windows installs
+- **App launching** with 5-tier fallback strategy (StartMenu → Desktop `.lnk` → Desktop contains → StartMenu contains → Uninstall registry) hitting ~95% on typical Windows installs
 - **Bilingual app aliases** (微信↔WeChat / QQ音乐↔QQMusic / etc.)
-- **Personal task list** with AI sync — silver wolf can add/complete/list tasks via tools, manual UI also available
+- **Personal task list** with AI sync — Silver Wolf can add/complete/list tasks via tools, manual UI also available
 - **3-tab sidebar**: chat / tasks / built-in cheatsheet
-- **HSR-styled floating panels**: launcher hex button, screenshot insight HUD, pomodoro overlay
+- **HSR-styled floating panels**: hexagonal launcher button, screenshot insight HUD, pomodoro overlay
 
-## Requirements
+### Requirements
 
 - Windows 10 / 11 (x64)
 - Node.js 18+ (for building from source)
 - Anthropic API key (`sk-ant-...`) — users provide their own; not bundled
 
-## Build
+### Build
 
 ```bash
 npm install
@@ -38,23 +126,50 @@ build.bat
 
 Output: `dist/SilverWolfPet-vX.X.X-win-x64.zip`
 
-The zip contains the unpacked Electron app + manuals (快速开始.txt + 使用说明书.md). End user just unzips and runs `SilverWolfPet.exe`.
+The zip contains the unpacked Electron app + manuals (`快速开始.txt` + `使用说明书.md`). End user just unzips and runs `SilverWolfPet.exe` — no Node required.
 
-## Architecture
+### Architecture
 
-- `main.js` — Electron main process. State persistence, PowerShell IPC handlers, window management, global shortcut, pomodoro timer.
-- `sidebar.html` — primary chat UI + 3-tab system (chat/tasks/manual). Hosts the agentic Claude tool-use loop.
-- `character.html` — animated 84×115 sprite in 240×140 transparent window. State machine for hover/fly/flee/job. Speech bubble panel with mood variants.
-- `launcher.html` — small floating hex button to toggle sidebar.
-- `helper.html` — screenshot insight modal with 5 modes (HSR menu styling).
-- `pomodoro.html` — floating top-right countdown panel.
-- `preload.js` — context bridge exposing IPC to renderers.
-- `silver-wolf-skill-distilled.md` — sync-source for `SW_PERSONA` constant in sidebar.html.
+```
+.
+├── main.js                          Electron main process
+├── preload.js                       contextBridge — IPC exposure to renderers
+├── package.json / build.bat         build entrypoints
+│
+├── renderer/                        5 window HTMLs
+│   ├── sidebar.html                 chat UI + 3-tab (chat/tasks/manual), agentic Claude loop
+│   ├── character.html               84×115 sprite + speech bubble (240×140 transparent window)
+│   ├── launcher.html                hexagonal floating button to toggle sidebar
+│   ├── helper.html                  screenshot insight modal (5 modes, HSR styling)
+│   └── pomodoro.html                floating top-right pomodoro countdown
+│
+├── assets/                          art / icons
+│   ├── icon.ico                     app icon
+│   ├── sw_sheet.png                 sprite sheet used by character.html
+│   ├── sw_side.png / sw_sprite*.png art originals (excluded from release build)
+│   ├── launcher_icon.png            icon used by launcher.html
+│   └── launcher_raw.png             launcher art original (gitignored)
+│
+├── scripts/                         build / dev helpers
+│   ├── get_windows.ps1              foreground-window enumerator, called via IPC
+│   ├── gen_icon.py                  generates assets/icon.ico
+│   ├── process_launcher_icon.py     launcher_raw → launcher_icon
+│   └── init_and_push.bat            one-shot git init + push
+│
+└── docs/
+    ├── 使用说明书.md                  copied into release by build.bat; opened by Manual button
+    ├── 快速开始.txt                   copied into release by build.bat
+    └── silver-wolf-skill-distilled.md sync source for SW_PERSONA in sidebar.html
+```
 
 State persisted at `%APPDATA%\silver-wolf-pet\state.json`.
 
-## License
+### License
 
-MIT. Fan project, not affiliated with miHoYo / HoYoverse.
+MIT License. See [LICENSE](./LICENSE).
 
-Character © miHoYo · Honkai: Star Rail. AI backend © Anthropic.
+The original code is released under MIT. **The character IP belongs to miHoYo / HoYoverse** — the MIT license grants no rights over the underlying character IP.
+
+---
+
+Character © miHoYo · *Honkai: Star Rail*. AI backend © Anthropic.

@@ -7,7 +7,7 @@ REM   Silver Wolf Pet - one-shot Git init + push to GitHub
 REM   Repo target: SilverWolf-lv999-DesktopPet (public)
 REM ============================================================
 
-cd /d "%~dp0"
+cd /d "%~dp0\.."
 echo.
 echo ============================================================
 echo   Silver Wolf Pet  ::  Git init + push to GitHub

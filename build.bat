@@ -21,7 +21,7 @@ if %errorlevel% neq 0 ( echo [!] FAILED & pause & exit /b 1 )
 echo.
 echo [2/5] icon...
 where python >nul 2>&1
-if %errorlevel% equ 0 ( python -m pip install pillow -q 2>nul & python gen_icon.py )
+if %errorlevel% equ 0 ( python -m pip install pillow -q 2>nul & python scripts\gen_icon.py )
 
 echo.
 echo [3/5] electron-packager...
@@ -31,9 +31,9 @@ if %errorlevel% neq 0 ( echo [!] BUILD FAILED & pause & exit /b 1 )
 set "DIST=dist\SilverWolfPet-win32-x64"
 echo.
 echo [4/5] copying docs into %DIST% ...
-if exist "快速开始.txt"      copy /Y "快速开始.txt"      "%DIST%\" >nul
-if exist "使用说明书.md"     copy /Y "使用说明书.md"     "%DIST%\" >nul
-if exist "README.md"         copy /Y "README.md"         "%DIST%\" >nul
+if exist "docs\快速开始.txt"   copy /Y "docs\快速开始.txt"   "%DIST%\" >nul
+if exist "docs\使用说明书.md"  copy /Y "docs\使用说明书.md"  "%DIST%\" >nul
+if exist "README.md"           copy /Y "README.md"           "%DIST%\" >nul
 
 echo.
 echo [5/5] zipping release...

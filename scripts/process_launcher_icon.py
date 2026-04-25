@@ -1,7 +1,7 @@
 from PIL import Image
 import os
 
-src = Image.open('launcher_raw.png').convert('RGBA')
+src = Image.open('assets/launcher_raw.png').convert('RGBA')
 w, h = src.size
 px = src.load()
 
@@ -28,7 +28,7 @@ if bbox:
 # 输出：launcher_icon.png 108×108（2x 清晰度，CSS 显示 54×54）
 # NEAREST 保持像素风锐利
 launcher_icon = src.resize((108, 108), Image.NEAREST)
-launcher_icon.save('launcher_icon.png', 'PNG')
+launcher_icon.save('assets/launcher_icon.png', 'PNG')
 
-print('Generated launcher_icon.png')
+print('Generated assets/launcher_icon.png')
 print(f'Source: {w}x{h}, cropped: {bbox}')
