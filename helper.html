@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep:#08020e;
+  --bg-mid:#1a0a2e;
+  --bg-edge:#050108;
+  --pink:#ff2bb9;
+  --pinkL:#ff66d6;
+  --pinkD:#cc0099;
+  --pinkGlow:rgba(255,43,185,.6);
+  --cyan:#00f0ff;
+  --cyanL:#66e8ff;
+  --cyanGlow:rgba(0,240,255,.5);
+  --violet:#8b5cf6;
+  --text:#ffffff;
+  --textD:rgba(255,210,250,.55);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+html, body {
+  width:100%; height:100%;
+  background:transparent;
+  overflow:hidden;
+  font-family:'Noto Sans SC','Microsoft YaHei',sans-serif;
+}
+
+/* ============================================================
+   OUTER SHELL
+============================================================ */
+#shell {
+  width:100%; height:100%;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 20%, rgba(255,43,185,.18) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 50% 100%, rgba(0,240,255,.10) 0%, transparent 60%),
+    linear-gradient(180deg, #08020e 0%, #050108 100%);
+  display:flex; flex-direction:column;
+  overflow:hidden;
+  position:relative;
+  border:1px solid var(--pink);
+  box-shadow:
+    inset 0 0 0 2px rgba(0,0,0,.6),
+    0 0 0 1px rgba(0,240,255,.3),
+    0 0 32px rgba(255,43,185,.4),
+    0 8px 36px rgba(0,0,0,.85);
+}
+
+/* Halftone pink dot grid */
+#shell::before {
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255,43,185,.18) 1px, transparent 1.5px),
+    radial-gradient(circle at 4px 4px, rgba(0,240,255,.08) 1px, transparent 1.5px);
+  background-size:8px 8px, 16px 16px;
+  background-position:0 0, 0 0;
+  opacity:.85;
+}
+
+/* CRT scanlines */
+#shell::after {
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:1;
+  background:
+    repeating-linear-gradient(0deg,
+      transparent 0 2px,
+      rgba(0,0,0,.22) 2px 3px);
+  mix-blend-mode:multiply;
+  animation:scan 8s linear infinite;
+}
+@keyframes scan {
+  0%   { background-position:0 0; }
+  100% { background-position:0 8px; }
+}
+
+/* ============================================================
+   TITLE — chunky 8-bit with RGB chromatic ghost
+============================================================ */
+#title-wrap {
+  flex-shrink:0; z-index:2; position:relative;
+  padding:14px 8px 6px;
+  text-align:center;
+}
+#title {
+  font-family:'Press Start 2P', monospace;
+  font-size:14px;
+  letter-spacing:3px;
+  color:var(--text);
+  /* RGB chromatic aberration via stacked text-shadow */
+  text-shadow:
+    -2px 0 0 var(--cyan),
+     2px 0 0 var(--pink),
+    -2px 1px 0 rgba(0,240,255,.5),
+     2px 1px 0 rgba(255,43,185,.6),
+     0 0 14px rgba(255,43,185,.7),
+     0 0 24px rgba(255,43,185,.4);
+  display:inline-block;
+  position:relative;
+}
+#title-sub {
+  margin-top:6px;
+  font-family:'VT323', monospace;
+  font-size:10px;
+  letter-spacing:2px;
+  color:var(--cyanL);
+  text-shadow:0 0 6px var(--cyanGlow);
+  opacity:.85;
+}
+#title-sub::before { content:'« '; color:var(--pinkL); }
+#title-sub::after { content:' »'; color:var(--pinkL); }
+
+/* ============================================================
+   THUMBNAIL — pixel-cornered frame with sparkles
+============================================================ */
+#thumb-outer {
+  flex-shrink:0; z-index:2; position:relative;
+  margin:4px 16px 6px;
+}
+#thumb-wrap {
+  padding:3px;
+  background:rgba(0,0,0,.7);
+  /* 8-bit stepped chamfer */
+  clip-path:polygon(
+    3px 0, calc(100% - 3px) 0,
+    calc(100% - 3px) 1px, calc(100% - 1px) 1px,
+    calc(100% - 1px) 3px, 100% 3px,
+    100% calc(100% - 3px), calc(100% - 1px) calc(100% - 3px),
+    calc(100% - 1px) calc(100% - 1px), calc(100% - 3px) calc(100% - 1px),
+    calc(100% - 3px) 100%, 3px 100%,
+    3px calc(100% - 1px), 1px calc(100% - 1px),
+    1px calc(100% - 3px), 0 calc(100% - 3px),
+    0 3px, 1px 3px,
+    1px 1px, 3px 1px
+  );
+  box-shadow:
+    inset 0 0 0 1px var(--pink),
+    0 0 12px rgba(255,43,185,.4);
+}
+#thumb {
+  width:100%; display:block;
+  aspect-ratio:16/9; object-fit:cover;
+  filter:saturate(1.1) contrast(1.08);
+}
+/* Corner sparkles around thumbnail */
+.sparkle {
+  position:absolute;
+  font-family:'Press Start 2P', monospace;
+  font-size:9px;
+  pointer-events:none;
+}
+.sp1 { top:-4px; left:-3px;  color:var(--cyan); text-shadow:0 0 6px var(--cyanGlow); animation:tw 1.8s ease-in-out infinite; }
+.sp2 { top:-4px; right:-3px; color:var(--pinkL); text-shadow:0 0 6px var(--pinkGlow); animation:tw 2.1s ease-in-out infinite .3s; }
+.sp3 { bottom:-4px; left:-3px;  color:var(--pinkL); text-shadow:0 0 6px var(--pinkGlow); animation:tw 1.6s ease-in-out infinite .6s; }
+.sp4 { bottom:-4px; right:-3px; color:var(--cyan); text-shadow:0 0 6px var(--cyanGlow); animation:tw 2.4s ease-in-out infinite .9s; }
+@keyframes tw { 0%,100% { opacity:.4; transform:scale(.85); } 50% { opacity:1; transform:scale(1.15); } }
+
+/* ============================================================
+   MODE BUTTONS — 8-bit stepped corners + magenta glow on hover
+============================================================ */
+#modes {
+  flex:1; z-index:2; position:relative;
+  padding:4px 14px 6px;
+  display:flex; flex-direction:column;
+  justify-content:space-evenly;
+  gap:1px;
+}
+
+.mode-btn {
+  position:relative;
+  height:30px;
+  padding:0 10px 0 12px;
+  display:flex; align-items:center;
+  background:linear-gradient(90deg,
+    rgba(8,2,14,.96) 0%,
+    rgba(26,10,46,.85) 100%);
+  border:none;
+  color:var(--cyanL);
+  font-size:11.5px;
+  letter-spacing:1px;
+  cursor:pointer;
+  transition:color .15s, background .15s, box-shadow .15s, transform .12s steps(4);
+  /* 8-bit stepped chamfered corners (1px stairsteps × 2) */
+  clip-path:polygon(
+    3px 0, calc(100% - 3px) 0,
+    calc(100% - 3px) 1px, calc(100% - 1px) 1px,
+    calc(100% - 1px) 3px, 100% 3px,
+    100% calc(100% - 3px), calc(100% - 1px) calc(100% - 3px),
+    calc(100% - 1px) calc(100% - 1px), calc(100% - 3px) calc(100% - 1px),
+    calc(100% - 3px) 100%, 3px 100%,
+    3px calc(100% - 1px), 1px calc(100% - 1px),
+    1px calc(100% - 3px), 0 calc(100% - 3px),
+    0 3px, 1px 3px,
+    1px 1px, 3px 1px
+  );
+  box-shadow:
+    inset 0 0 0 1px var(--cyan),
+    inset 0 0 8px rgba(0,240,255,.08),
+    0 0 6px rgba(0,240,255,.12);
+}
+
+.mode-btn .bullet {
+  font-family:'Press Start 2P', monospace;
+  font-size:8px;
+  color:var(--cyan);
+  margin-right:7px;
+  text-shadow:0 0 4px var(--cyanGlow);
+}
+.mode-btn .icon {
+  font-size:13px;
+  margin-right:7px;
+  filter:drop-shadow(0 0 3px var(--cyanGlow));
+}
+.mode-btn .label {
+  flex:1;
+  font-weight:500;
+  text-shadow:0 0 4px rgba(0,240,255,.25);
+}
+.mode-btn .arrow {
+  font-family:'Press Start 2P', monospace;
+  font-size:8px;
+  color:var(--pinkL);
+  margin-left:4px;
+  transition:transform .12s steps(2), color .12s;
+  text-shadow:0 0 4px var(--pinkGlow);
+}
+.mode-btn .key {
+  font-family:'Press Start 2P', monospace;
+  font-size:7px;
+  color:var(--cyan);
+  margin-left:8px;
+  width:14px; height:14px;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(0,240,255,.08);
+  box-shadow:inset 0 0 0 1px var(--cyan);
+}
+
+/* HOVER / FOCUS — hot magenta arcade highlight */
+.mode-btn:hover, .mode-btn:focus {
+  outline:none;
+  color:var(--text);
+  background:linear-gradient(90deg,
+    rgba(255,43,185,.55) 0%,
+    rgba(204,0,153,.75) 100%);
+  box-shadow:
+    inset 0 0 0 1px var(--text),
+    inset 0 0 12px rgba(255,255,255,.2),
+    0 0 18px var(--pinkGlow),
+    0 0 4px rgba(255,255,255,.5);
+  /* RGB chromatic shift on label */
+}
+.mode-btn:hover .label, .mode-btn:focus .label {
+  text-shadow:
+    -1px 0 0 var(--cyan),
+     1px 0 0 var(--pink),
+     0 0 8px rgba(255,255,255,.7);
+}
+.mode-btn:hover .bullet, .mode-btn:focus .bullet {
+  color:var(--text);
+  text-shadow:0 0 6px var(--text);
+}
+.mode-btn:hover .arrow, .mode-btn:focus .arrow {
+  transform:translateX(4px);
+  color:var(--text);
+  text-shadow:0 0 8px var(--text);
+}
+.mode-btn:hover .key, .mode-btn:focus .key {
+  color:var(--text);
+  background:rgba(255,255,255,.18);
+  box-shadow:inset 0 0 0 1px var(--text);
+}
+.mode-btn:hover .icon, .mode-btn:focus .icon {
+  filter:drop-shadow(0 0 6px rgba(255,255,255,.8));
+}
+
+/* ============================================================
+   FOOTER — arcade button hints + position counter
+============================================================ */
+#hint {
+  flex-shrink:0; z-index:2; position:relative;
+  padding:8px 12px 9px;
+  border-top:1px dashed rgba(255,43,185,.3);
+  background:rgba(0,0,0,.4);
+  display:flex; justify-content:space-between; align-items:center;
+  font-family:'Press Start 2P', monospace;
+  font-size:6px;
+  letter-spacing:1.2px;
+}
+.hint-btn {
+  display:flex; align-items:center; gap:4px;
+  color:var(--textD);
+}
+.hint-btn .sym {
+  font-size:8px;
+  width:13px; height:13px;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(255,43,185,.15);
+  box-shadow:inset 0 0 0 1px var(--pink);
+  color:var(--pinkL);
+  text-shadow:0 0 4px var(--pinkGlow);
+}
+.hint-btn.cancel .sym {
+  background:rgba(0,240,255,.12);
+  box-shadow:inset 0 0 0 1px var(--cyan);
+  color:var(--cyan);
+  text-shadow:0 0 4px var(--cyanGlow);
+}
+.hint-pos {
+  color:var(--cyanL);
+  font-size:7px;
+  text-shadow:0 0 4px var(--cyanGlow);
+  letter-spacing:1.5px;
+}
+</style>
+</head>
+<body>
+<div id="shell">
+
+  <div id="title-wrap">
+    <div id="title">INSIGHT</div>
+    <div id="title-sub">AETHER EDITOR</div>
+  </div>
+
+  <div id="thumb-outer">
+    <span class="sparkle sp1">✦</span>
+    <span class="sparkle sp2">✦</span>
+    <span class="sparkle sp3">✦</span>
+    <span class="sparkle sp4">✦</span>
+    <div id="thumb-wrap"><img id="thumb" alt=""></div>
+  </div>
+
+  <div id="modes">
+    <div class="mode-btn" data-mode="explain"   tabindex="0">
+      <span class="bullet">▰</span><span class="icon">🔍</span><span class="label">解释</span>
+      <span class="arrow">▶</span><span class="key">1</span>
+    </div>
+    <div class="mode-btn" data-mode="translate" tabindex="0">
+      <span class="bullet">▰</span><span class="icon">🌐</span><span class="label">翻译</span>
+      <span class="arrow">▶</span><span class="key">2</span>
+    </div>
+    <div class="mode-btn" data-mode="debug"     tabindex="0">
+      <span class="bullet">▰</span><span class="icon">🐛</span><span class="label">找错</span>
+      <span class="arrow">▶</span><span class="key">3</span>
+    </div>
+    <div class="mode-btn" data-mode="ocr"       tabindex="0">
+      <span class="bullet">▰</span><span class="icon">📋</span><span class="label">OCR</span>
+      <span class="arrow">▶</span><span class="key">4</span>
+    </div>
+    <div class="mode-btn" data-mode="summarize" tabindex="0">
+      <span class="bullet">▰</span><span class="icon">📝</span><span class="label">总结</span>
+      <span class="arrow">▶</span><span class="key">5</span>
+    </div>
+  </div>
+
+  <div id="hint">
+    <span class="hint-btn confirm"><span class="sym">▶</span>ENTER</span>
+    <span class="hint-pos" id="pos">01/05</span>
+    <span class="hint-btn cancel"><span class="sym">✕</span>ESC</span>
+  </div>
+
+</div>
+<script>
+let currentMeta = null
+
+window.sw.onHelperInit(meta => {
+  currentMeta = meta
+  if (meta && meta.dataUrl) {
+    document.getElementById('thumb').src = meta.dataUrl
+  }
+  const first = document.querySelector('.mode-btn')
+  if (first) first.focus()
+})
+
+function pick(mode) {
+  if (!currentMeta || !mode) {
+    window.sw.helperCancel()
+    return
+  }
+  window.sw.helperPick({ mode, meta: currentMeta })
+  currentMeta = null
+}
+
+const allBtns = document.querySelectorAll('.mode-btn')
+const posEl = document.getElementById('pos')
+allBtns.forEach((btn, i) => {
+  btn.addEventListener('click', () => pick(btn.dataset.mode))
+  btn.addEventListener('focus', () => {
+    posEl.textContent = String(i + 1).padStart(2, '0') + '/' + String(allBtns.length).padStart(2, '0')
+  })
+})
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    window.sw.helperCancel()
+    return
+  }
+  const map = { '1':'explain','2':'translate','3':'debug','4':'ocr','5':'summarize' }
+  if (map[e.key]) {
+    e.preventDefault()
+    pick(map[e.key])
+  }
+})
+</script>
+</body>
+</html>

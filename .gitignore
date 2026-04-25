@@ -1,0 +1,53 @@
+# ---------- Node / Electron ----------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- Build output ----------
+dist/
+out/
+build/
+*.zip
+*.exe
+*.nupkg
+*.AppImage
+*.dmg
+
+# ---------- Runtime / user state ----------
+# state.json + launcher_pos.json live under %APPDATA%\silver-wolf-pet,
+# but ignore any local copies to be safe.
+state.json
+launcher_pos.json
+*.log
+
+# ---------- Secrets ----------
+.env
+.env.*
+*.pem
+*.key
+secrets/
+config.local.*
+
+# ---------- Editor / OS ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- Local Claude / agent metadata ----------
+.claude/
+.claude-cache/
+
+# ---------- Python (gen_icon.py 等脚本副产物) ----------
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# ---------- Misc generated assets ----------
+launcher_raw.png

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:240px; height:140px; background:transparent; overflow:hidden; }
+#wrap { width:240px; height:140px; position:relative; cursor:default; }
+/* Pointer affordance scoped to sprite zone — bubble area stays click-through-feeling */
+#sw { cursor:pointer; }
+#sw {
+  width:84px; height:115px;
+  background-image:url('sw_sheet.png');
+  background-repeat:no-repeat;
+  image-rendering:pixelated;
+  position:absolute; top:0; left:0;
+}
+#bubble {
+  position:absolute;
+  left:96px;
+  top:6px;
+  max-width:135px;
+  background:rgba(6,2,18,.95);
+  border:1.5px solid rgba(124,58,237,.72);
+  border-radius:10px 10px 10px 2px;
+  padding:6px 10px;
+  font-family:'Microsoft YaHei',sans-serif;
+  font-size:11.5px;
+  line-height:1.45;
+  color:rgba(220,200,255,.95);
+  pointer-events:none;
+  opacity:0;
+  transform:translateX(-6px);
+  transition:opacity .22s, transform .22s;
+  text-shadow:0 0 8px rgba(168,85,247,.55);
+  z-index:10;
+  white-space:pre-wrap;
+  word-break:break-word;
+  box-shadow:0 0 14px rgba(124,58,237,.4);
+}
+#bubble::before {
+  content:''; position:absolute; left:-7px; top:14px;
+  border:7px solid transparent;
+  border-right-color:rgba(124,58,237,.72);
+  border-left:0;
+}
+#bubble.show {
+  opacity:1;
+  transform:translateX(0);
+}
+
+/* Mood variants — color shifts driven by main process via show-quip { mood } */
+#bubble.processing {
+  border-color:rgba(34,211,238,.75);
+  color:rgba(190,235,255,.95);
+  text-shadow:0 0 8px rgba(34,211,238,.55);
+  box-shadow:0 0 14px rgba(34,211,238,.4);
+}
+#bubble.processing::before { border-right-color:rgba(34,211,238,.75); }
+
+#bubble.success {
+  border-color:rgba(167,243,208,.7);
+  color:rgba(225,255,238,.95);
+  text-shadow:0 0 8px rgba(34,197,94,.4);
+  box-shadow:0 0 14px rgba(34,197,94,.35);
+}
+#bubble.success::before { border-right-color:rgba(167,243,208,.7); }
+
+#bubble.alert {
+  border-color:rgba(248,113,113,.75);
+  color:rgba(255,220,220,.95);
+  text-shadow:0 0 8px rgba(239,68,68,.5);
+  box-shadow:0 0 14px rgba(239,68,68,.4);
+}
+#bubble.alert::before { border-right-color:rgba(248,113,113,.75); }
+.pt { position:absolute; border-radius:50%; pointer-events:none; animation:ptF linear forwards; }
+@keyframes ptF { 0%{transform:translateY(0) scale(1);opacity:.9;} 100%{transform:translateY(-60px) scale(0);opacity:0;} }
+</style>
+</head>
+<body>
+<div id="wrap" onclick="onPetClick()">
+  <div id="sw"></div>
+  <div id="bubble"></div>
+</div>
+
+<script>
+const swEl   = document.getElementById('sw')
+const bubble = document.getElementById('bubble')
+const wrap   = document.getElementById('wrap')
+
+// ── Sprite sheet ──
+// 16 frames each 84x115. frames 0-7 = front/hover, 8-15 = side/fly
+const FW = 84, FH = 115
+// Window box (bigger than sprite to fit bubble). Used only for screen-edge clamping.
+const WIN_W = 240, WIN_H = 140
+const FRAME_SPEED_HOVER = 30
+const FRAME_SPEED_FLY   = 20
+const FRAME_SPEED_FAST  = 15
+
+function setFrame(n, flipX) {
+  swEl.style.backgroundPosition = `-${n * FW}px 0px`
+  swEl.style.transform = flipX ? 'scaleX(-1)' : 'scaleX(1)'
+}
+
+// ── Screen info (pos is in screen px = window position) ──
+let scr = { w:1920, h:1040, SIDE_W:0, scale:1 }
+
+// pos = top-left corner of the character WINDOW in screen coords
+let pos    = { x:800, y:400 }
+// vel in px/frame
+let vel    = { x:0,   y:0   }
+// desired destination (screen coords, same space as pos)
+let target = { x:600, y:300 }
+
+let state    = 'hover'
+let stTimer  = 0
+let frame    = 0
+let animTick = 0
+let facingLeft = false
+let cursor   = { x:0, y:0 }
+let clickJob = null  // { screenX, screenY } — actual screen coord to click
+
+const QUIPS = ['Aha...','有意思','笑死','...','副本cleared','新任务？','在线','行行行','别过来','检测中','安排','搞定','懂了','嗯']
+let bubTO = null
+function showBubble(txt, ms, mood) {
+  if(bubTO) clearTimeout(bubTO)
+  bubble.textContent = txt || ''
+  bubble.classList.remove('processing', 'success', 'alert')
+  if (mood && mood !== 'default') bubble.classList.add(mood)
+  bubble.classList.add('show')
+  bubTO = setTimeout(() => bubble.classList.remove('show'), ms || 2200)
+}
+
+// ── Physics constants ──
+// Normal wandering: gentle inertia
+const ACCEL_WANDER = 0.08
+const SPEED_WANDER = 2.5
+// Directed flight: fast and accurate
+const ACCEL_FLY    = 0.10
+const SPEED_FLY    = 3.5
+const ACCEL_JOB    = 0.22  // fast for click jobs
+const SPEED_JOB    = 6.5
+// Flee: fastest
+const SPEED_FLEE   = 8.0
+const ACCEL_FLEE   = 0.30
+// Arrival threshold
+const ARRIVE_DIST  = 8
+const EDGE         = 8
+
+// ── Bounds ──
+function bounds() {
+  return {
+    maxX: scr.w - (scr.SIDE_W || 0) - WIN_W - EDGE,  // window box, not sprite, so bubble doesn't clip
+    maxY: scr.h - WIN_H - EDGE,
+    minX: EDGE,
+    minY: EDGE
+  }
+}
+
+function pickTarget() {
+  const b = bounds()
+  // Stay in top-right zone: x = 60%-100% of width, y = 0-35% of height
+  const zoneX0 = b.minX + (b.maxX - b.minX) * 0.60
+  const zoneX1 = b.maxX
+  const zoneY0 = b.minY
+  const zoneY1 = b.minY + (b.maxY - b.minY) * 0.35
+  target.x = zoneX0 + Math.random() * (zoneX1 - zoneX0)
+  target.y = zoneY0 + Math.random() * (zoneY1 - zoneY0)
+}
+
+// ── Main loop ──
+let quipT = 0
+function tick() {
+  frame++; stTimer++; animTick++; quipT++
+
+  if(frame % 6  === 0) window.sw.getCursor().then(pt => { cursor = pt })
+  if(frame % 60 === 0) window.sw.getScreen().then(s  => { scr = s })
+
+  if(quipT > 600 && Math.random() < .0015) {
+    showBubble(QUIPS[Math.floor(Math.random()*QUIPS.length)]); quipT=0
+  }
+
+  const b = bounds()
+
+  // ── Cursor proximity ──
+  // cursor is in screen coords; character center in screen coords:
+  const charCX = pos.x + FW/2
+  const charCY = pos.y + FH/2
+  const cdist  = Math.hypot(cursor.x - charCX, cursor.y - charCY)
+
+  if(cdist < 50 && state !== 'flee' && state !== 'job') {
+    const angle = Math.atan2(charCY - cursor.y, charCX - cursor.x)
+    target.x = Math.max(b.minX, Math.min(b.maxX, pos.x + Math.cos(angle)*350))
+    target.y = Math.max(b.minY, Math.min(b.maxY, pos.y + Math.sin(angle)*350))
+    state='flee'; stTimer=0
+    showBubble(['跑了','闪','别贴','...走了'][Math.floor(Math.random()*4)], 1200)
+  } else if(cdist < 90 && state==='hover' && Math.random()<.015) {
+    state='react'; stTimer=0
+    showBubble(['！','Aha','别过来','有意思...'][Math.floor(Math.random()*4)], 1500)
+  }
+
+  // ── State transitions (non-job) ──
+  if(state==='react' && stTimer>55)  { state='hover'; stTimer=0 }
+  if(state==='flee'  && stTimer>80)  { state='fly';   stTimer=0 }
+  if(state==='hover' && stTimer>1800+Math.random()*1800) { pickTarget(); state='fly'; stTimer=0 }
+
+  // ── Determine accel/speed ──
+  let accel, speed, tgtX, tgtY
+
+  if(state === 'job' && clickJob) {
+    // Fly to window position that puts character center near target icon
+    tgtX  = clickJob.winX
+    tgtY  = clickJob.winY
+    accel = ACCEL_JOB
+    speed = SPEED_JOB
+
+    const dist = Math.hypot(pos.x - tgtX, pos.y - tgtY)
+    if(dist < ARRIVE_DIST) {
+      // SNAP to position, then click
+      pos.x = tgtX; pos.y = tgtY; vel.x = 0; vel.y = 0
+      window.sw.charMove(pos.x, pos.y)
+      const job = clickJob; clickJob = null
+      burst()
+      showBubble(['GG，点了。','点了。','搞定。','安排好了。'][Math.floor(Math.random()*4)], 1800)
+      setTimeout(() => {
+        window.sw.smartDoubleClick(job.screenX, job.screenY).then(() => {
+          state='hover'; pickTarget()
+        })
+      }, 80)
+      requestAnimationFrame(tick)
+      return
+    }
+  } else if(state === 'flee') {
+    tgtX=target.x; tgtY=target.y; accel=ACCEL_FLEE; speed=SPEED_FLEE
+  } else {
+    tgtX=target.x; tgtY=target.y
+    accel = state==='fly' ? ACCEL_FLY : ACCEL_WANDER
+    speed = state==='fly' ? SPEED_FLY : SPEED_WANDER
+  }
+
+  // ── Steering ──
+  const dx = tgtX - pos.x
+  const dy = tgtY - pos.y
+  const dist = Math.hypot(dx, dy)
+
+  if(dist > ARRIVE_DIST) {
+    // Desired velocity
+    const desVX = (dx/dist) * speed
+    const desVY = (dy/dist) * speed
+    vel.x += (desVX - vel.x) * accel
+    vel.y += (desVY - vel.y) * accel
+    if(state==='fly'||state==='flee'||state==='job')
+      facingLeft = vel.x > 0.3  // sprite faces left, flip when going right
+  } else {
+    // Arrived
+    vel.x *= 0.75; vel.y *= 0.75
+    if(Math.abs(vel.x)<0.15 && Math.abs(vel.y)<0.15) {
+      vel.x=0; vel.y=0
+      if(state==='fly'||state==='flee') { state='hover'; stTimer=0 }
+    }
+  }
+
+  pos.x += vel.x
+  pos.y += vel.y
+
+  // ── Clamp to screen ──
+  if(pos.x < b.minX) { pos.x=b.minX; vel.x=Math.abs(vel.x)*.3 }
+  if(pos.x > b.maxX) { pos.x=b.maxX; vel.x=-Math.abs(vel.x)*.3 }
+  if(pos.y < b.minY) { pos.y=b.minY; vel.y=Math.abs(vel.y)*.3 }
+  if(pos.y > b.maxY) {
+    pos.y=b.maxY; vel.y=-Math.abs(vel.y)*.3
+    if(frame%120===0) window.sw.revealTaskbar()
+  }
+  // Soft zone enforcement: if drifted outside top-right zone, nudge back
+  if(state==='hover' || state==='fly') {
+    const zoneX0 = b.minX + (b.maxX - b.minX) * 0.55
+    const zoneY1 = b.minY + (b.maxY - b.minY) * 0.40
+    if(pos.x < zoneX0 && state==='hover') { pickTarget(); state='fly'; stTimer=0 }
+    if(pos.y > zoneY1 && state==='hover') { pickTarget(); state='fly'; stTimer=0 }
+  }
+
+  // ── Animation frame selection ──
+  const spd = Math.hypot(vel.x, vel.y)
+  if(state==='react') {
+    setFrame(Math.floor(animTick/8)%2===0 ? 3 : 7, facingLeft)
+  } else if(spd > 0.5 || state==='job') {
+    const fps = state==='flee' ? FRAME_SPEED_FAST : FRAME_SPEED_FLY
+    setFrame(8 + Math.floor(animTick/fps)%8, facingLeft)
+  } else {
+    setFrame(Math.floor(animTick/FRAME_SPEED_HOVER)%8, false)
+  }
+
+  window.sw.charMove(Math.round(pos.x), Math.round(pos.y))
+  requestAnimationFrame(tick)
+}
+
+// ── Interactions ──
+function onPetClick() {
+  window.sw.toggleSidebar(); burst()
+  showBubble(['Aha——叫我？','说吧','有什么活','行——说吧','...在的'][Math.floor(Math.random()*5)], 2500)
+  state='react'; stTimer=0
+}
+wrap.addEventListener('contextmenu', e => { e.preventDefault(); window.sw.contextMenu() })
+
+function burst() {
+  for(let i=0;i<10;i++){
+    const p=document.createElement('div'); p.className='pt'
+    p.style.left=(10+Math.random()*60)+'px'
+    p.style.top=(10+Math.random()*80)+'px'
+    p.style.width=p.style.height=(2+Math.random()*4)+'px'
+    p.style.animationDuration=(.45+Math.random()*.65)+'s'
+    p.style.animationDelay=(Math.random()*.2)+'s'
+    const c=['rgba(168,85,247,.9)','rgba(34,211,238,.9)','rgba(196,181,253,.9)','rgba(100,200,255,.85)']
+    p.style.background=c[Math.floor(Math.random()*c.length)]
+    wrap.appendChild(p); setTimeout(()=>p.remove(),900)
+  }
+}
+
+// ── Fly-to-click from sidebar ──
+window.sw.onFlyToClick(data => {
+  // data.screenX/Y: actual screen coord to click
+  // derive window position: center character on target
+  const winX = Math.max(EDGE, Math.min(bounds().maxX, Math.round(data.screenX - FW/2)))
+  const winY = Math.max(EDGE, Math.min(bounds().maxY, Math.round(data.screenY - FH - 5)))
+  clickJob = { winX, winY, screenX: data.screenX, screenY: data.screenY }
+  state = 'job'; stTimer = 0
+  const lines = ['呜...定位中', '找到了，飞过去', 'Aha——锁定', '副本目标已标记']
+  showBubble(lines[Math.floor(Math.random()*lines.length)], 2000)
+})
+
+// ── Init ──
+async function init() {
+  scr = await window.sw.getScreen()
+  const b = bounds()
+  // Start in top-right zone
+  pos.x = Math.floor(b.minX + (b.maxX - b.minX) * 0.75)
+  pos.y = Math.floor(b.minY + (b.maxY - b.minY) * 0.10)
+  pickTarget(); state='fly'; tick()
+}
+init()
+
+if (window.sw && window.sw.onShowQuip) {
+  window.sw.onShowQuip(d => showBubble(d && d.text, d && d.duration, d && d.mood))
+}
+</script>
+</body>
+</html>

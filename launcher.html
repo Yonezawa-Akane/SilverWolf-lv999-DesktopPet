@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><style>
+:root {
+  --bg:#080618; --pur:#7c3aed; --purL:#a855f7; --purLL:#c084fc;
+  --pink:#e040fb; --cyan:#22d3ee; --text:#f0e8ff;
+}
+* { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+html, body {
+  width:120px; height:120px;
+  background:transparent;
+  overflow:hidden;
+  cursor:pointer;
+  scrollbar-width:none;
+}
+::-webkit-scrollbar { display:none; }
+body.dragging { cursor:grabbing; }
+
+#core {
+  position:absolute; left:33px; top:33px;
+  width:54px; height:54px;
+  background:rgba(8,4,28,.96);
+  border:1.5px solid var(--purL);
+  clip-path:polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  display:flex; align-items:center; justify-content:center;
+  font-size:22px; color:var(--text);
+  transition:transform .18s cubic-bezier(.34,1.56,.64,1), filter .18s;
+  will-change:transform;
+}
+body.active #core { color:var(--cyan); font-size:18px; font-weight:bold; }
+#core img {
+  width: 42px;
+  height: 42px;
+  image-rendering: pixelated;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+body.active #core img { display:none; }
+
+#halo {
+  position:absolute; left:28px; top:28px; width:64px; height:64px;
+  clip-path:polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background:linear-gradient(135deg, var(--pur), var(--pink));
+  opacity:.55;
+  animation:halo 2.4s ease-in-out infinite;
+  pointer-events:none;
+}
+@keyframes halo {
+  0%,100% { transform:scale(1); opacity:.45; }
+  50%     { transform:scale(1.08); opacity:.85; }
+}
+
+body:not(.dragging):hover #core {
+  transform:scale(1.12);
+  filter:drop-shadow(0 0 10px var(--purL));
+}
+body:not(.dragging):active #core {
+  transform:scale(.92);
+}
+body.dragging #core {
+  transform:rotate(-6deg) scale(1.05);
+  filter:drop-shadow(0 6px 16px rgba(0,0,0,.6));
+  transition:none;
+}
+
+.ripple {
+  position:absolute; left:60px; top:60px; width:54px; height:54px;
+  margin:-27px 0 0 -27px; border-radius:50%;
+  background:radial-gradient(circle, var(--pinkL,#f472b6) 0%, transparent 70%);
+  pointer-events:none; opacity:1;
+  animation:ripple .5s ease-out forwards;
+}
+@keyframes ripple { to { transform:scale(2.4); opacity:0; } }
+
+.pt { position:absolute; border-radius:50%; pointer-events:none;
+      animation:pt .7s linear forwards; }
+@keyframes pt { to { transform:translate(var(--dx),var(--dy)) scale(0); opacity:0; } }
+</style></head>
+<body>
+  <div id="halo"></div>
+  <div id="core"><img id="core-img" src="launcher_icon.png" alt=""></div>
+<script>
+const core = document.getElementById('core')
+let winPos = { x:0, y:0 }  // cached launcher window screen coords
+let dragging = false, down = false, downSX = 0, downSY = 0
+let dOffX = 0, dOffY = 0
+const THRESH = 8
+
+// 初始化：读当前窗口位置 + sidebar 状态
+async function init() {
+  try {
+    const b = await window.sw.launcherPos()
+    winPos = { x: b.x, y: b.y }
+  } catch {}
+  try {
+    const vis = await window.sw.sidebarVisible()
+    setActive(vis)
+  } catch {}
+}
+window.sw.onSidebarState(setActive)
+
+function setActive(v) {
+  const img = document.getElementById('core-img')
+  if (v) {
+    img.style.display = 'none'
+    core.childNodes.forEach(n => { if(n.nodeType===3) n.remove() })  // 清文本
+    if (!core.querySelector('.minus')) {
+      const m = document.createElement('span')
+      m.className = 'minus'
+      m.textContent = '─'
+      m.style.fontSize = '22px'
+      m.style.fontWeight = 'bold'
+      m.style.color = 'var(--cyan)'
+      core.appendChild(m)
+    }
+  } else {
+    img.style.display = 'block'
+    const m = core.querySelector('.minus')
+    if (m) m.remove()
+  }
+  document.body.classList.toggle('active', v)
+}
+
+core.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return  // 仅响应左键
+  down = true
+  dragging = false
+  downSX = e.screenX; downSY = e.screenY
+  dOffX = e.screenX - winPos.x
+  dOffY = e.screenY - winPos.y
+  core.setPointerCapture(e.pointerId)
+})
+
+core.addEventListener('pointermove', e => {
+  if (!down) return
+  const dx = e.screenX - downSX, dy = e.screenY - downSY
+  if (!dragging && Math.hypot(dx, dy) > THRESH) {
+    dragging = true
+    document.body.classList.add('dragging')
+  }
+  if (dragging) {
+    const nx = e.screenX - dOffX, ny = e.screenY - dOffY
+    winPos.x = nx; winPos.y = ny
+    window.sw.launcherMove(nx, ny)
+  }
+})
+
+function endDrag(e) {
+  if (!down) return
+  const wasDragging = dragging
+  down = false; dragging = false
+  document.body.classList.remove('dragging')
+  try { core.releasePointerCapture(e.pointerId) } catch {}
+  if (!wasDragging) {
+    // 纯点击
+    window.sw.toggleSidebar()
+    spawnRipple()
+    spawnBurst()
+  } else {
+    // 拖拽结束，刷新缓存位置（防止 clamp 调整过）
+    window.sw.launcherPos().then(b => { winPos = { x: b.x, y: b.y } })
+  }
+}
+core.addEventListener('pointerup', endDrag)
+core.addEventListener('pointercancel', endDrag)
+window.addEventListener('blur', () => {
+  down = false; dragging = false
+  document.body.classList.remove('dragging')
+})
+
+document.addEventListener('contextmenu', e => {
+  e.preventDefault()
+  window.sw.launcherContext()
+})
+
+function spawnRipple() {
+  const r = document.createElement('div')
+  r.className = 'ripple'
+  document.body.appendChild(r)
+  setTimeout(() => r.remove(), 550)
+}
+
+function spawnBurst() {
+  const colors = ['rgba(168,85,247,.95)','rgba(34,211,238,.9)','rgba(224,64,251,.9)','rgba(196,181,253,.9)']
+  for (let i = 0; i < 8; i++) {
+    const p = document.createElement('div')
+    p.className = 'pt'
+    p.style.left = '60px'; p.style.top = '60px'
+    p.style.width = p.style.height = (3 + Math.random() * 3) + 'px'
+    p.style.background = colors[Math.floor(Math.random() * colors.length)]
+    const ang = (Math.PI * 2 / 8) * i + Math.random() * .3
+    const dist = 30 + Math.random() * 20
+    p.style.setProperty('--dx', Math.cos(ang) * dist + 'px')
+    p.style.setProperty('--dy', Math.sin(ang) * dist + 'px')
+    document.body.appendChild(p)
+    setTimeout(() => p.remove(), 750)
+  }
+}
+
+init()
+</script></body></html>

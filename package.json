@@ -1,0 +1,15 @@
+{
+  "name": "silver-wolf-pet",
+  "version": "2.0.0",
+  "description": "Silver Wolf Shimeji Desktop Pet",
+  "main": "main.js",
+  "author": "Fan Project",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-packager . SilverWolfPet --platform=win32 --arch=x64 --out=dist --overwrite --icon=icon.ico --electron-version=28.3.3 --ignore=node_modules --ignore=dist --ignore=gen_icon.py --ignore=build.bat --ignore=^/\\.claude --ignore=^/launcher_raw\\.png$ --ignore=^/process_launcher_icon\\.py$ --ignore=^/sw_side\\.png$ --ignore=^/sw_sprite\\.png$ --ignore=^/sw_sprite_flip\\.png$ --ignore=^/silver-wolf-skill-distilled\\.md$"
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "@electron/packager": "^18.3.5"
+  }
+}

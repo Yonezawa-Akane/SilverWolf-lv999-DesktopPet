@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep:#08020e;
+  --pink:#ff2bb9;
+  --pinkL:#ff66d6;
+  --cyan:#00f0ff;
+  --cyanL:#66e8ff;
+  --green:#22c55e;
+  --greenL:#86efac;
+  --text:#ffffff;
+  --textD:rgba(220,210,255,.55);
+}
+* { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+html, body {
+  width:100%; height:100%;
+  background:transparent;
+  overflow:hidden;
+  font-family:'Noto Sans SC','Microsoft YaHei',sans-serif;
+}
+#shell {
+  width:100%; height:100%;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(255,43,185,.18) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(8,4,28,.96) 0%, rgba(4,2,16,.98) 100%);
+  border:1px solid var(--pink);
+  position:relative;
+  display:flex; flex-direction:column;
+  overflow:hidden;
+  box-shadow:
+    inset 0 0 0 2px rgba(0,0,0,.6),
+    0 0 0 1px rgba(0,240,255,.3),
+    0 0 24px rgba(255,43,185,.4),
+    0 6px 20px rgba(0,0,0,.7);
+}
+#shell::before {
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255,43,185,.18) 1px, transparent 1.5px);
+  background-size:8px 8px;
+  opacity:.7;
+}
+#shell::after {
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:1;
+  background:repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,.22) 2px 3px);
+  mix-blend-mode:multiply;
+}
+#shell.break-mode { border-color:var(--cyan); }
+#shell.break-mode::before { background-image:radial-gradient(circle at 1px 1px, rgba(0,240,255,.2) 1px, transparent 1.5px); }
+
+#title {
+  flex-shrink:0; z-index:2; position:relative;
+  font-family:'Press Start 2P', monospace;
+  font-size:7px; letter-spacing:1.8px;
+  color:var(--cyanL);
+  text-align:center;
+  padding:9px 8px 4px;
+  text-shadow:0 0 6px rgba(0,240,255,.5);
+}
+#phase-label {
+  font-size:9px; letter-spacing:2px;
+  color:var(--pink);
+  text-shadow:0 0 6px rgba(255,43,185,.6);
+  margin-top:3px;
+}
+#shell.break-mode #phase-label {
+  color:var(--cyan);
+  text-shadow:0 0 6px rgba(0,240,255,.6);
+}
+
+#countdown-row {
+  flex:1; z-index:2; position:relative;
+  display:flex; align-items:center; justify-content:center;
+  gap:8px;
+  padding:0 12px;
+}
+#phase-icon {
+  font-size:24px;
+  filter:drop-shadow(0 0 6px rgba(255,43,185,.5));
+}
+#countdown {
+  font-family:'Press Start 2P', monospace;
+  font-size:32px;
+  letter-spacing:2px;
+  color:var(--text);
+  text-shadow:
+    -2px 0 0 var(--cyan),
+     2px 0 0 var(--pink),
+     0 0 14px rgba(255,43,185,.7),
+     0 0 24px rgba(255,43,185,.4);
+  font-variant-numeric:tabular-nums;
+}
+#countdown.urgent {
+  animation:urgentPulse 1s steps(2) infinite;
+}
+@keyframes urgentPulse {
+  0%,100% { color:var(--text); }
+  50% { color:var(--pinkL); }
+}
+
+#meta {
+  flex-shrink:0; z-index:2; position:relative;
+  padding:4px 14px 6px;
+  display:flex; flex-direction:column; gap:3px;
+  align-items:center;
+}
+#label {
+  font-family:'VT323', monospace;
+  font-size:13px;
+  color:var(--textD);
+  letter-spacing:1px;
+  font-style:italic;
+  text-align:center;
+  max-width:100%;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+#counter {
+  font-family:'Press Start 2P', monospace;
+  font-size:6.5px;
+  color:var(--cyanL);
+  letter-spacing:2px;
+  text-shadow:0 0 4px rgba(0,240,255,.5);
+}
+#counter::before { content:'·· '; color:var(--pink); }
+#counter::after { content:' ··'; color:var(--pink); }
+
+#actions {
+  flex-shrink:0; z-index:2; position:relative;
+  padding:6px 12px 9px;
+  display:flex; justify-content:flex-end;
+  border-top:1px dashed rgba(255,43,185,.25);
+}
+#stop-btn {
+  font-family:'Press Start 2P', monospace;
+  font-size:6.5px;
+  letter-spacing:1.5px;
+  color:var(--pinkL);
+  background:rgba(255,43,185,.1);
+  border:1px solid var(--pink);
+  padding:5px 9px;
+  cursor:pointer;
+  transition:all .15s;
+}
+#stop-btn:hover {
+  background:rgba(255,43,185,.4);
+  color:var(--text);
+  box-shadow:0 0 12px rgba(255,43,185,.6);
+}
+#stop-btn:active { transform:scale(.97); }
+</style>
+</head>
+<body>
+<div id="shell">
+  <div id="title">// POMODORO //
+    <div id="phase-label">— WORK —</div>
+  </div>
+  <div id="countdown-row">
+    <div id="phase-icon">🍅</div>
+    <div id="countdown">00:00</div>
+  </div>
+  <div id="meta">
+    <div id="label"></div>
+    <div id="counter">TODAY 0/0</div>
+  </div>
+  <div id="actions">
+    <button id="stop-btn">✕ STOP</button>
+  </div>
+</div>
+<script>
+const shell = document.getElementById('shell')
+const phaseLabel = document.getElementById('phase-label')
+const phaseIcon = document.getElementById('phase-icon')
+const countdown = document.getElementById('countdown')
+const labelEl = document.getElementById('label')
+const counter = document.getElementById('counter')
+
+function fmt(s) {
+  s = Math.max(0, Math.floor(s || 0))
+  const m = Math.floor(s / 60)
+  const ss = s % 60
+  return String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0')
+}
+
+function render(p) {
+  if (!p || !p.running) return
+  const isBreak = p.phase === 'break'
+  shell.classList.toggle('break-mode', isBreak)
+  phaseLabel.textContent = isBreak ? '— BREAK —' : '— WORK —'
+  phaseIcon.textContent = isBreak ? '☕' : '🍅'
+  countdown.textContent = fmt(p.remaining_seconds)
+  labelEl.textContent = p.label ? '「' + p.label + '」' : ''
+  const today = p.completed_today != null ? p.completed_today : 0
+  counter.textContent = 'TODAY ' + String(today).padStart(2, '0')
+  countdown.classList.toggle('urgent', p.remaining_seconds <= 60 && p.remaining_seconds > 0)
+}
+
+if (window.sw && window.sw.onPomodoroTick) {
+  window.sw.onPomodoroTick(payload => {
+    if (!payload) return
+    render(payload)
+  })
+}
+
+document.getElementById('stop-btn').addEventListener('click', () => {
+  if (window.sw && window.sw.cancelPomodoroFromPanel) {
+    window.sw.cancelPomodoroFromPanel()
+  }
+})
+</script>
+</body>
+</html>
