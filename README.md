@@ -20,7 +20,7 @@
 
 ### 功能特性
 
-- **银狼角色**（崩坏：星穹铁道）—— 完整人格通过 skill 蒸馏注入，吊儿郎当三屏并行的骇客味儿
+- **银狼角色**（崩坏：星穹铁道）—— 基于 GitHub 上开源的 `花火.skill` 蒸馏方案构建，完整人格通过 skill 蒸馏注入。对她而言，这世界不过是一场要打到极限通关的游戏
 - **长期记忆**横跨多次会话：facts / 每日总结 / 180 天对话归档 / 跨日主动问候
 - **全局截屏热键** `Ctrl+Shift+\` —— 5 种分析模式：解释 / 翻译 / 调试 / OCR / 总结
 - **番茄钟** —— 屏幕右上悬浮倒计时面板，阶段切换由银狼语音化播报
@@ -28,7 +28,7 @@
 - **中英应用别名互通**（微信 ↔ WeChat / QQ音乐 ↔ QQMusic 等）
 - **个人任务清单** —— AI 工具同步：银狼可以通过工具新增/完成/列出任务，也保留手动 UI
 - **三栏侧边栏**：聊天 / 任务 / 内置使用手册
-- **星穹铁道风悬浮面板**：六边形启动按钮 / 截屏洞察 HUD / 番茄钟覆层
+- **银狼 lv.999 骇客风格悬浮面板**：六边形启动按钮 / 截屏洞察 HUD / 番茄钟覆层
 
 ### 系统要求
 
@@ -101,7 +101,7 @@ A floating desktop pet with full character persona, screen-aware shortcuts, cros
 
 ### Features
 
-- **银狼 character** (Honkai: Star Rail) — full persona injected via skill distillation; the sardonic, multi-monitor hacker vibe
+- **银狼 character** (Honkai: Star Rail) — built on the open-source `花火.skill` distillation from GitHub; full persona injected via skill distillation. To her, the world is just a game to be played to its limits
 - **Long-term memory** across sessions: facts / daily summaries / 180-day conversation archive / proactive cross-day greeting
 - **Global screenshot hotkey** (`Ctrl+Shift+\`) with 5 analysis modes: explain / translate / debug / OCR / summarize
 - **Pomodoro** with floating top-right countdown panel and Silver-Wolf-voiced phase transitions
@@ -109,7 +109,7 @@ A floating desktop pet with full character persona, screen-aware shortcuts, cros
 - **Bilingual app aliases** (微信↔WeChat / QQ音乐↔QQMusic / etc.)
 - **Personal task list** with AI sync — Silver Wolf can add/complete/list tasks via tools, manual UI also available
 - **3-tab sidebar**: chat / tasks / built-in cheatsheet
-- **HSR-styled floating panels**: hexagonal launcher button, screenshot insight HUD, pomodoro overlay
+- **Silver Wolf lv.999 hacker-styled floating panels**: hexagonal launcher button, screenshot insight HUD, pomodoro overlay
 
 ### Requirements
 
