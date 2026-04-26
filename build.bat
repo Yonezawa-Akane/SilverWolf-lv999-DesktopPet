@@ -41,7 +41,11 @@ echo [5/5] zipping release...
 for /f "tokens=*" %%v in ('node -p "require('./package.json').version"') do set VERSION=%%v
 set "ZIPNAME=SilverWolfPet-v%VERSION%-win-x64.zip"
 if exist "dist\%ZIPNAME%" del "dist\%ZIPNAME%"
-powershell -NoProfile -Command "$ErrorActionPreference='Stop'; try { Compress-Archive -Path 'dist\SilverWolfPet-win32-x64\*' -DestinationPath 'dist\%ZIPNAME%' -Force; Write-Host '[ok] zipped' } catch { Write-Host '[!] zip failed:' $_.Exception.Message; exit 1 }"
+rem Use .NET ZipFile.CreateFromDirectory with explicit UTF-8 encoding for entry names.
+rem Compress-Archive on Windows PowerShell 5.1 writes non-ASCII filenames in the system
+rem code page without setting the zip UTF-8 flag (bit 11), which makes the Windows 11
+rem Explorer extractor reject the archive as "invalid" when names like 使用说明书.md are present.
+powershell -NoProfile -Command "$ErrorActionPreference='Stop'; try { Add-Type -AssemblyName System.IO.Compression; Add-Type -AssemblyName System.IO.Compression.FileSystem; $src = (Resolve-Path 'dist\SilverWolfPet-win32-x64').Path; $dst = Join-Path (Resolve-Path 'dist').Path '%ZIPNAME%'; [System.IO.Compression.ZipFile]::CreateFromDirectory($src, $dst, [System.IO.Compression.CompressionLevel]::Optimal, $false, [System.Text.Encoding]::UTF8); Write-Host '[ok] zipped' } catch { Write-Host '[!] zip failed:' $_.Exception.Message; exit 1 }"
 
 echo.
 echo ============================================
