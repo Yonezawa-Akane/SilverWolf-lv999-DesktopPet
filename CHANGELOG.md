@@ -4,6 +4,25 @@
 
 ---
 
+## [2.1.2] — 2026-04-26
+
+### 新增 / Added
+
+- **UI 缩放**（设置面板 → 4 档：小 / 默认 / 大 / 特大，对应 0.9 / 1.0 / 1.15 / 1.3）。所有窗口同步通过 `webContents.setZoomFactor` 缩放，持久化到 `state.preferences.ui_scale`。
+
+### 修复 / Fixed
+
+- **多开问题** —— 双击 `.exe` 或桌面快捷方式不会再生出新的银狼了。加了 `app.requestSingleInstanceLock()`，第二次启动会立刻退出并把已有的 sidebar 拉到前台。
+- **快捷动作按钮（截图 / 搜索 / Pinterest / 下载 / 找文件）字号过小** —— 之前用了像素字体 Press Start 2P + 5.5px 字号，中文字符 fallback 到等宽字体后几乎看不清。改用 Noto Sans SC 11px。
+- **底部 "银狼" name tag 同样字号偏小问题** —— 改 Noto Sans SC 11px / weight 500。
+- **设置面板按钮（含 "清空对话历史"）字号偏小** —— 改 Noto Sans SC 11px。
+
+### 内部 / Internal
+
+- 移除 sidebar 内置 cheatsheet 标签里的版本标注（不再在用户 UI 显示版本号，由文档 / `CHANGELOG.md` 管理）。
+
+---
+
 ## [2.1.1] — 2026-04-26
 
 ### 修复 / Fixed

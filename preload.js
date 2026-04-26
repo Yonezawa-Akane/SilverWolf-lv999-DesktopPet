@@ -49,4 +49,5 @@ contextBridge.exposeInMainWorld('sw', {
   shortcutStatus:       ()        => ipcRenderer.invoke('shortcut-status'),
   shortcutCreate:       ()        => ipcRenderer.invoke('shortcut-create'),
   shortcutRemove:       ()        => ipcRenderer.invoke('shortcut-remove'),
+  setUiScale:           (scale)   => ipcRenderer.invoke('set-ui-scale', scale),
 })

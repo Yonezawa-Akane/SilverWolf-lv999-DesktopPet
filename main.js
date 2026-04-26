@@ -4,6 +4,16 @@ const fs = require('fs')
 const os = require('os')
 const { execSync, exec } = require('child_process')
 
+// -- Single-instance lock --
+// Without this, double-clicking the .exe (or the desktop shortcut) again spawns a fresh
+// Silver Wolf each time — the screen ends up filled with sprites and every window competes
+// for state.json. Second instance signals the first to surface, then exits via `return`
+// (CommonJS top-level return, supported by Node's module wrapper).
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+  return
+}
+
 let charWin, sideWin, launchWin
 const PS = path.join(__dirname, 'scripts', 'get_windows.ps1')
 const CHAR_W = 84, CHAR_H = 115            // sprite pixel size — used for visual centering math
@@ -102,6 +112,30 @@ function rescueStrandedWindows() {
   checkAndFix(pomodoroWin)
 }
 
+// -- UI scale --
+// Per-window zoom factor controlled from the settings panel. We apply via
+// webContents.setZoomFactor on every alive window so text + bubbles + menus all scale
+// together. Range 0.5–2.0 is clamped; the UI exposes 4 presets (0.9 / 1.0 / 1.15 / 1.3).
+function applyUiScale(scale) {
+  const s = Math.max(0.5, Math.min(2.0, Number(scale) || 1.0))
+  for (const w of [sideWin, charWin, launchWin, helperWin, pomodoroWin]) {
+    if (alive(w)) {
+      try { w.webContents.setZoomFactor(s) } catch {}
+    }
+  }
+  return s
+}
+
+// On every window's first content load, apply the persisted ui_scale. setZoomFactor before
+// did-finish-load can race the renderer init and silently no-op, so we hook the event.
+function hookUiScaleOnLoad(win) {
+  if (!alive(win)) return
+  win.webContents.on('did-finish-load', () => {
+    const s = (_state && _state.preferences && _state.preferences.ui_scale) || 1.0
+    try { win.webContents.setZoomFactor(s) } catch {}
+  })
+}
+
 // -- Persistent state (conversation history, preferences, learned paths, routines, facts).
 // Lives at userData/state.json. Shape is stable-for-forward-compat: loadState shallow-merges
 // the loaded file on top of DEFAULT_STATE so new fields added in future releases appear on
@@ -116,7 +150,8 @@ const DEFAULT_STATE = {
     max_tokens: 1024,
     archive_retention_days: 180,    // archived_conversations entries older than this are purged on quit
     proactive_greeting_hours: 8,    // <= 0 disables; otherwise sidebar greets if last_active older than this
-    quick_insight_shortcut: 'CommandOrControl+Shift+\\'   // global hotkey for screenshot helper
+    quick_insight_shortcut: 'CommandOrControl+Shift+\\',  // global hotkey for screenshot helper
+    ui_scale: 1.0                   // webContents.setZoomFactor applied to every window; 0.9 / 1.0 / 1.15 / 1.3 from settings
   },
   learned_apps: {},
   routines: {},
@@ -448,6 +483,9 @@ function createWindows() {
   })
   pomodoroWin.loadFile('renderer/pomodoro.html')
   pomodoroWin.setAlwaysOnTop(true, 'screen-saver')
+
+  // Apply persisted ui_scale to every window once its content finishes loading.
+  for (const w of [sideWin, charWin, launchWin, helperWin, pomodoroWin]) hookUiScaleOnLoad(w)
 }
 
 app.whenReady().then(() => {
@@ -507,6 +545,19 @@ app.on('before-quit', () => {
   }
 })
 app.on('window-all-closed', () => app.quit())
+
+// User tried to launch a second instance — the requestSingleInstanceLock above made it
+// quit, but here we wake the existing one up: surface sidebar + character so they can
+// see Silver Wolf is already running.
+app.on('second-instance', () => {
+  if (alive(sideWin)) {
+    if (sideWin.isMinimized()) sideWin.restore()
+    sideWin.show()
+    sideWin.focus()
+  }
+  if (alive(charWin) && !charWin.isVisible()) charWin.show()
+  if (alive(launchWin) && !launchWin.isVisible()) launchWin.show()
+})
 
 // -- Quick-Insight: capture screen + show helper near cursor --
 async function triggerQuickInsight() {
@@ -755,6 +806,15 @@ async function maybePromptDesktopShortcut() {
 ipcMain.handle('shortcut-status', () => shortcutStatus())
 ipcMain.handle('shortcut-create', () => createDesktopShortcut())
 ipcMain.handle('shortcut-remove', () => removeDesktopShortcut())
+
+// UI scale: persist + apply to all windows. Renderer fetches current via state-get.
+ipcMain.handle('set-ui-scale', (e, scale) => {
+  const s = applyUiScale(scale)
+  if (!_state.preferences) _state.preferences = {}
+  _state.preferences.ui_scale = s
+  saveStateDebounced()
+  return { ok: true, scale: s }
+})
 
 // -- File conversion --
 // Drag-drop a file onto the sidebar → main process picks the right converter and writes
