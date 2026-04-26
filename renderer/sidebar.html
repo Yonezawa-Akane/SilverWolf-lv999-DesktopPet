@@ -528,10 +528,123 @@ textarea:focus{border-bottom-color:var(--purL);}
   background:rgba(34,211,238,.35);
   color:#fff;
 }
+
+/* ── DRAG-DROP / FILE CONVERT ── */
+#shell.sw-dragging::before {
+  background-image:radial-gradient(circle,rgba(192,132,252,.3) 1px,transparent 1px);
+}
+#sw-drop-overlay {
+  position:absolute; inset:0; z-index:50;
+  display:none; align-items:center; justify-content:center;
+  background:rgba(8,4,28,.55);
+  border:2px dashed var(--purLL);
+  border-radius:var(--radius);
+  pointer-events:none;
+  font-family:'Press Start 2P',monospace; font-size:9px;
+  color:var(--purLL); letter-spacing:1.2px; text-align:center;
+  text-shadow:0 0 8px rgba(192,132,252,.6);
+}
+#shell.sw-dragging #sw-drop-overlay { display:flex; }
+
+/* Convert menu (post-drop)
+   Sidebar can be as narrow as 220px / as short as 300px, so the menu uses viewport-relative
+   caps (calc(100vw/vh - margins)) and `overflow-y:auto` so it scrolls instead of clipping. */
+.sw-convert-menu {
+  position:fixed; z-index:9999;
+  background:rgba(8,4,28,.97);
+  border:1.5px solid var(--purL);
+  border-radius:8px;
+  padding:10px 8px;
+  box-shadow:0 0 24px rgba(168,85,247,.5), 0 4px 18px rgba(0,0,0,.7);
+  width:calc(100vw - 24px);
+  max-width:240px;
+  max-height:calc(100vh - 24px);
+  overflow-y:auto;
+  font-family:'Noto Sans SC',sans-serif;
+  color:var(--text);
+  scrollbar-width:thin; scrollbar-color:rgba(124,58,237,.4) transparent;
+}
+.sw-convert-menu::-webkit-scrollbar{width:3px;}
+.sw-convert-menu::-webkit-scrollbar-thumb{background:rgba(124,58,237,.5);border-radius:2px;}
+.sw-convert-menu .sw-cm-title {
+  font-family:'Press Start 2P',monospace; font-size:6px;
+  color:var(--cyan); letter-spacing:1px;
+  margin-bottom:4px; padding:0 4px 6px;
+  border-bottom:1px solid rgba(124,58,237,.3);
+}
+.sw-convert-menu .sw-cm-file {
+  font-size:10px; color:var(--textD);
+  padding:0 4px 8px; word-break:break-all;
+  border-bottom:1px solid rgba(124,58,237,.2);
+  margin-bottom:6px;
+}
+.sw-convert-menu .sw-cm-section {
+  font-family:'Press Start 2P',monospace; font-size:5px;
+  color:var(--purLL); letter-spacing:1.2px;
+  margin:8px 4px 4px; opacity:.75;
+}
+.sw-convert-menu .sw-cm-section:first-of-type { margin-top:0; }
+.sw-convert-menu .sw-cm-grid {
+  display:grid; grid-template-columns:repeat(2, 1fr); gap:4px;
+}
+.sw-convert-menu .sw-cm-grid.cols-1 { grid-template-columns:1fr; }
+.sw-convert-menu .sw-cm-opt {
+  display:block; padding:6px 8px; cursor:pointer; border-radius:4px;
+  text-transform:uppercase; letter-spacing:.5px; font-size:11px;
+  font-family:'Press Start 2P',monospace;
+  background:rgba(124,58,237,.12);
+  border:1px solid rgba(124,58,237,.25);
+  color:var(--purLL);
+  text-align:center;
+  transition:all .12s;
+  user-select:none;
+}
+.sw-convert-menu .sw-cm-opt:hover {
+  background:var(--pur); color:#fff; border-color:var(--purLL);
+  transform:translateY(-1px);
+  box-shadow:0 0 10px rgba(168,85,247,.5);
+}
+/* Operations (split / rotate / etc) — different color band, mixed-script font */
+.sw-convert-menu .sw-cm-opt.op {
+  font-family:'Noto Sans SC',sans-serif;
+  text-transform:none; letter-spacing:0; font-size:11px;
+  background:rgba(34,211,238,.08);
+  border-color:rgba(34,211,238,.3);
+  color:var(--cyanL);
+}
+.sw-convert-menu .sw-cm-opt.op:hover {
+  background:rgba(34,211,238,.4); color:#fff;
+  border-color:var(--cyan);
+  box-shadow:0 0 10px rgba(34,211,238,.5);
+}
+.sw-convert-menu .sw-cm-cancel {
+  margin-top:8px; text-align:center;
+  font-size:9px; color:var(--textD);
+  cursor:pointer; padding:4px;
+  font-family:'Press Start 2P',monospace; letter-spacing:1px;
+}
+.sw-convert-menu .sw-cm-cancel:hover { color:var(--pinkL); }
+
+/* System message bubble (file-convert results, etc.) — uses the default Noto Sans SC
+   stack so mixed CJK + Latin renders at a consistent size; the pixel font would force
+   Chinese characters into a different fallback and look mismatched. */
+.msg.sys { align-items:center; }
+.msg.sys .bub {
+  background:rgba(34,211,238,.08);
+  border:1px solid rgba(34,211,238,.3);
+  border-left:2px solid var(--cyan);
+  color:var(--cyanL);
+  font-size:11px;
+  padding:6px 10px; line-height:1.5;
+  word-break:break-all;
+}
 </style>
 </head>
 <body>
 <div id="shell">
+  <!-- DRAG-DROP OVERLAY (file convert) -->
+  <div id="sw-drop-overlay">// DROP_FILE //<br>SW.CONVERT.READY</div>
+
   <!-- TITLEBAR (drag handle) -->
   <div id="titlebar" id="tb">
     <div class="tb-left">
@@ -671,6 +784,7 @@ textarea:focus{border-bottom-color:var(--purL);}
   <div class="sd">Anthropic API Key<br>本地存储，不上传</div>
   <input class="si" id="ki" type="password" placeholder="sk-ant-..."/>
   <button class="sb2" onclick="saveKey()">▶ SAVE</button>
+  <button class="sb2" id="sc-btn" onclick="toggleShortcut()" style="background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.4);color:var(--cyanL);">⏳ 检查桌面快捷方式…</button>
   <button class="sb2" style="background:rgba(80,20,20,.4);border-color:rgba(239,68,68,.4);color:rgba(255,140,140,.9);" onclick="clearHist()">⌧ 清空对话历史</button>
   <button class="sb2" style="background:transparent;border-color:rgba(124,58,237,.2);color:var(--textD);font-size:6px;" onclick="hideSettings()">✕ CANCEL</button>
 </div>
@@ -717,8 +831,47 @@ document.addEventListener('mouseup', ()=>{ dragging=false })
 let scr = { scale:1 }
 const getKey=()=>localStorage.getItem('sw_key')||''
 function saveKey(){const k=document.getElementById('ki').value.trim();if(k){localStorage.setItem('sw_key',k);hideSettings();addMsg('ai','KEY ACCEPTED. 接入。')}}
-function showSettings(){document.getElementById('ki').value=getKey();document.getElementById('settings').classList.add('show')}
+function showSettings(){document.getElementById('ki').value=getKey();document.getElementById('settings').classList.add('show');refreshShortcutBtn()}
 function hideSettings(){document.getElementById('settings').classList.remove('show')}
+
+// Desktop shortcut toggle: refreshes label/state from main on every settings open so
+// out-of-band changes (created via launcher menu, manually deleted) stay in sync.
+async function refreshShortcutBtn() {
+  const btn = document.getElementById('sc-btn')
+  if (!btn || !window.sw || !window.sw.shortcutStatus) return
+  try {
+    const s = await window.sw.shortcutStatus()
+    if (!s.supported) {
+      btn.textContent = '⊘ 桌面快捷方式（打包后可用）'
+      btn.disabled = true
+      btn.style.opacity = .5
+      btn.dataset.exists = '0'
+      return
+    }
+    btn.disabled = false
+    btn.style.opacity = 1
+    btn.textContent = s.exists ? '✓ 桌面快捷方式（点击移除）' : '+ 创建桌面快捷方式'
+    btn.dataset.exists = s.exists ? '1' : '0'
+  } catch (err) {
+    btn.textContent = '✕ 检查失败'
+  }
+}
+
+async function toggleShortcut() {
+  const btn = document.getElementById('sc-btn')
+  if (!btn || btn.disabled) return
+  const wasExists = btn.dataset.exists === '1'
+  btn.disabled = true
+  btn.textContent = wasExists ? '⏳ 移除中…' : '⏳ 创建中…'
+  try {
+    const r = wasExists ? await window.sw.shortcutRemove() : await window.sw.shortcutCreate()
+    if (!r || !r.ok) {
+      alert((wasExists ? '移除' : '创建') + '失败：' + (r && r.error || '未知错误'))
+    }
+  } finally {
+    refreshShortcutBtn()
+  }
+}
 function confirmExit(){if(confirm('TERMINATE SESSION?')){window.sw.close()}}
 function clearHist(){
   if (!confirm('清空所有对话记录？此操作不可撤销。')) return
@@ -2221,6 +2374,191 @@ if (window.sw && window.sw.onPomodoroTick) {
 
     window.sw.setQuip(text, duration, mood, 'pomodoro-' + payload.event)
   })
+}
+
+// ── FILE CONVERSION (drag-drop a file onto sidebar) ──
+// In Electron, dropped File objects expose a real .path even with contextIsolation:true,
+// so we can hand the path straight to the main process. dragenter/dragover preventDefault
+// is required or the browser will navigate away to the file.
+;(function setupFileDrop() {
+  const shell = document.getElementById('shell')
+  if (!shell) return
+
+  // Counter pattern: dragenter/dragleave fire once per child crossing, so we count instead of
+  // toggling a flag — otherwise leaving the overlay (a child) drops the highlight prematurely.
+  let dragDepth = 0
+
+  function isFileDrag(e) {
+    if (!e.dataTransfer) return false
+    const types = e.dataTransfer.types
+    if (!types) return false
+    for (let i = 0; i < types.length; i++) {
+      if (types[i] === 'Files') return true
+    }
+    return false
+  }
+
+  shell.addEventListener('dragenter', e => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    dragDepth++
+    shell.classList.add('sw-dragging')
+  })
+  shell.addEventListener('dragover', e => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  })
+  shell.addEventListener('dragleave', e => {
+    if (!isFileDrag(e)) return
+    dragDepth = Math.max(0, dragDepth - 1)
+    if (dragDepth === 0) shell.classList.remove('sw-dragging')
+  })
+  shell.addEventListener('drop', async e => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    dragDepth = 0
+    shell.classList.remove('sw-dragging')
+    const files = Array.from(e.dataTransfer.files || [])
+    for (const f of files) {
+      const srcPath = f.path
+      if (!srcPath) {
+        addSysMsg('✕ 拿不到文件路径，重启试试')
+        continue
+      }
+      let targets = []
+      try { targets = await window.sw.convertTargets(srcPath) } catch {}
+      if (!targets || targets.length === 0) {
+        const ext = (f.name.match(/\.([^.]+)$/) || [, ''])[1].toLowerCase()
+        window.sw.setQuip(`.${ext || '?'} 这玩意我搞不动`, 2500, 'pout', 'converter')
+        addSysMsg(`✕ 不支持的格式：${f.name}`)
+        continue
+      }
+      showConvertMenu(srcPath, f.name, targets)
+    }
+  })
+})()
+
+// Append a system-style message to the chat (cyan, monospace) — used for convert results.
+function addSysMsg(text) {
+  const d = document.createElement('div')
+  d.className = 'msg sys'
+  const b = document.createElement('div')
+  b.className = 'bub'
+  b.textContent = String(text)
+  d.appendChild(b)
+  msgsEl.appendChild(d)
+  msgsEl.scrollTop = msgsEl.scrollHeight
+}
+
+// Operation targets (non-format, e.g. split/rotate) — labeled separately in the menu and
+// styled with a different color band so users see them as distinct from format conversions.
+const SW_OP_LABELS = {
+  split:    { icon: '✂', text: '拆分（每页1个PDF）' },
+  rotate90: { icon: '↻', text: '旋转 90°' }
+}
+
+// Modal-ish floating menu: click outside / Esc / Cancel to dismiss.
+let _swActiveConvertMenu = null
+function showConvertMenu(srcPath, fileName, targets) {
+  if (_swActiveConvertMenu) { try { _swActiveConvertMenu.remove() } catch {} _swActiveConvertMenu = null }
+
+  // Partition into formats (file extensions) vs operations (split/rotate/etc).
+  const ops = targets.filter(t => SW_OP_LABELS[t])
+  const formats = targets.filter(t => !SW_OP_LABELS[t])
+
+  const m = document.createElement('div')
+  m.className = 'sw-convert-menu'
+  m.style.left = '50%'
+  m.style.top = '50%'
+  m.style.transform = 'translate(-50%, -50%)'
+
+  const titleEl = document.createElement('div')
+  titleEl.className = 'sw-cm-title'
+  titleEl.textContent = '// CONVERT_TO //'
+  m.appendChild(titleEl)
+
+  const fileEl = document.createElement('div')
+  fileEl.className = 'sw-cm-file'
+  fileEl.textContent = fileName
+  m.appendChild(fileEl)
+
+  function makeOpt(target, label, isOp) {
+    const o = document.createElement('span')
+    o.className = 'sw-cm-opt' + (isOp ? ' op' : '')
+    o.textContent = label
+    o.addEventListener('click', () => {
+      cleanup()
+      runConvert(srcPath, fileName, target)
+    })
+    return o
+  }
+
+  if (formats.length > 0) {
+    const sec = document.createElement('div')
+    sec.className = 'sw-cm-section'
+    sec.textContent = '// FORMAT //'
+    m.appendChild(sec)
+    const grid = document.createElement('div')
+    grid.className = 'sw-cm-grid'
+    for (const t of formats) grid.appendChild(makeOpt(t, '.' + t, false))
+    m.appendChild(grid)
+  }
+
+  if (ops.length > 0) {
+    const sec = document.createElement('div')
+    sec.className = 'sw-cm-section'
+    sec.textContent = '// OPERATION //'
+    m.appendChild(sec)
+    const grid = document.createElement('div')
+    // Ops have longer Chinese labels — single column reads better and avoids text wrapping.
+    grid.className = 'sw-cm-grid cols-1'
+    for (const t of ops) {
+      const meta = SW_OP_LABELS[t]
+      grid.appendChild(makeOpt(t, meta.icon + ' ' + meta.text, true))
+    }
+    m.appendChild(grid)
+  }
+
+  const cancel = document.createElement('div')
+  cancel.className = 'sw-cm-cancel'
+  cancel.textContent = '[ESC] CANCEL'
+  cancel.addEventListener('click', cleanup)
+  m.appendChild(cancel)
+
+  document.body.appendChild(m)
+  _swActiveConvertMenu = m
+
+  function onKey(e) { if (e.key === 'Escape') cleanup() }
+  function onClickOutside(e) { if (m && !m.contains(e.target)) cleanup() }
+  function cleanup() {
+    document.removeEventListener('keydown', onKey)
+    document.removeEventListener('mousedown', onClickOutside)
+    if (m && m.parentNode) m.parentNode.removeChild(m)
+    if (_swActiveConvertMenu === m) _swActiveConvertMenu = null
+  }
+  document.addEventListener('keydown', onKey)
+  // Defer mousedown listener so the click that opened the menu doesn't immediately close it.
+  setTimeout(() => document.addEventListener('mousedown', onClickOutside), 0)
+}
+
+async function runConvert(srcPath, fileName, target) {
+  addSysMsg(`▶ 转换 ${fileName} → .${target.toUpperCase()}...`)
+  window.sw.setQuip(`稍等，编辑一下 .${target.toUpperCase()} 的以太层…`, 2200, 'processing', 'converter')
+  try {
+    const r = await window.sw.convertFile(srcPath, target)
+    if (r && r.ok) {
+      if (r.isFolder) {
+        addSysMsg(`✓ 拆出 ${r.count} 页 → ${r.outPath}\\`)
+      } else {
+        addSysMsg(`✓ 已生成：${r.outPath}`)
+      }
+    } else {
+      addSysMsg(`✕ 失败：${(r && r.error) || '未知错误'}`)
+    }
+  } catch (err) {
+    addSysMsg(`✕ 异常：${err && err.message || err}`)
+  }
 }
 </script>
 </body>

@@ -34,6 +34,7 @@ echo [4/5] copying docs into %DIST% ...
 if exist "docs\快速开始.txt"   copy /Y "docs\快速开始.txt"   "%DIST%\" >nul
 if exist "docs\使用说明书.md"  copy /Y "docs\使用说明书.md"  "%DIST%\" >nul
 if exist "README.md"           copy /Y "README.md"           "%DIST%\" >nul
+if exist "CHANGELOG.md"        copy /Y "CHANGELOG.md"        "%DIST%\" >nul
 
 echo.
 echo [5/5] zipping release...

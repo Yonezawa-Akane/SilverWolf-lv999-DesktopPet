@@ -30,6 +30,78 @@ const MODE_TRIGGER_TEXTS = {
 // reference is still truthy but the native object is destroyed, and any method call throws.
 const alive = (w) => w && !w.isDestroyed()
 
+// -- Display safety --
+// Saved window positions go stale across hardware changes (lid close on a docked laptop,
+// monitor unplugged, opening a saved profile on a smaller screen). Without these helpers a
+// launcher position that was at x=2400 on a 4K external becomes invisible on a 1366-wide
+// laptop screen, and the user can't right-click the (off-screen) launcher to fix it.
+
+// True if a `(x, y, w, h)` rect is fully inside any current display's work area.
+function isRectFullyVisible(x, y, w, h) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false
+  for (const d of screen.getAllDisplays()) {
+    const wa = d.workArea
+    if (x >= wa.x && y >= wa.y &&
+        x + w <= wa.x + wa.width &&
+        y + h <= wa.y + wa.height) {
+      return true
+    }
+  }
+  return false
+}
+
+// Extended-desktop bounding box across all displays — used by drag clamps so the user can
+// freely move a window between monitors without getting stuck at the primary's edge.
+function getDesktopBounds() {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const d of screen.getAllDisplays()) {
+    const wa = d.workArea
+    if (wa.x < minX) minX = wa.x
+    if (wa.y < minY) minY = wa.y
+    if (wa.x + wa.width > maxX) maxX = wa.x + wa.width
+    if (wa.y + wa.height > maxY) maxY = wa.y + wa.height
+  }
+  return { minX, minY, maxX, maxY }
+}
+
+// Clamp (x, y) so the window stays inside the extended-desktop bounding box on every axis.
+// Doesn't catch the rare L-shaped multi-monitor gap, but covers the 99% case.
+function clampToDesktop(x, y, w, h) {
+  const b = getDesktopBounds()
+  return {
+    x: Math.round(Math.max(b.minX, Math.min(b.maxX - w, x))),
+    y: Math.round(Math.max(b.minY, Math.min(b.maxY - h, y)))
+  }
+}
+
+// Pick a safe spawn position: use the saved coords if still visible, otherwise fall back
+// to the primary display's bottom-right corner with a small inset.
+function safeOrFallback(savedX, savedY, w, h) {
+  if (isRectFullyVisible(savedX, savedY, w, h)) {
+    return { x: savedX, y: savedY }
+  }
+  const p = screen.getPrimaryDisplay().workArea
+  return { x: p.x + p.width - w - 20, y: p.y + p.height - h - 20 }
+}
+
+// Runtime: when the display config changes, re-validate every window we know about.
+// Stranded windows snap to a safe position. Only triggers a setPosition if needed so we
+// don't shake static windows around on every spurious metrics change.
+function rescueStrandedWindows() {
+  const checkAndFix = (w) => {
+    if (!alive(w)) return
+    const b = w.getBounds()
+    if (isRectFullyVisible(b.x, b.y, b.width, b.height)) return
+    const safe = safeOrFallback(b.x, b.y, b.width, b.height)
+    try { w.setPosition(safe.x, safe.y) } catch {}
+  }
+  checkAndFix(launchWin)
+  checkAndFix(charWin)
+  checkAndFix(sideWin)
+  checkAndFix(helperWin)
+  checkAndFix(pomodoroWin)
+}
+
 // -- Persistent state (conversation history, preferences, learned paths, routines, facts).
 // Lives at userData/state.json. Shape is stable-for-forward-compat: loadState shallow-merges
 // the loaded file on top of DEFAULT_STATE so new fields added in future releases appear on
@@ -57,7 +129,8 @@ const DEFAULT_STATE = {
   pomodoro_completed_total: 0,    // lifetime tally of completed work sessions
   pomodoro_today_date: null,      // ISO date "YYYY-MM-DD"; resets pomodoro_today_count when day changes
   pomodoro_today_count: 0,
-  bubble_log: []                  // [{ timestamp, text, source, mood }, ...] — capped at 200
+  bubble_log: [],                 // [{ timestamp, text, source, mood }, ...] — capped at 200
+  shortcut_first_run_done: false  // true once first-run desktop-shortcut prompt has been answered
 }
 
 let _state = null
@@ -299,6 +372,7 @@ function createWindows() {
     skipTaskbar: false,
     hasShadow: true,
     show: false,
+    icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   })
   sideWin.loadFile('renderer/sidebar.html')
@@ -316,13 +390,15 @@ function createWindows() {
   charWin.setAlwaysOnTop(true, 'screen-saver')
 
   // -- Launcher (floating summon icon) --
+  // Position resolution: load saved coords → validate against current displays → fall back
+  // to primary bottom-right if invalid. The validation matters when the user opens the app
+  // on a different machine or after disconnecting an external monitor.
   launcherPosFile = path.join(app.getPath('userData'), 'launcher_pos.json')
   let lx = width - LAUNCH_W - 20, ly = height - LAUNCH_H - 20
   try {
     const saved = JSON.parse(fs.readFileSync(launcherPosFile, 'utf8'))
-    if (Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
-      lx = saved.x; ly = saved.y
-    }
+    const safe = safeOrFallback(saved.x, saved.y, LAUNCH_W, LAUNCH_H)
+    lx = safe.x; ly = safe.y
   } catch {}
   launchWin = new BrowserWindow({
     width: LAUNCH_W, height: LAUNCH_H,
@@ -402,6 +478,22 @@ app.whenReady().then(() => {
       showPomodoroPanel()
     }
   }
+
+  // First-run desktop-shortcut prompt — delayed so the launcher/sidebar are visible
+  // first (gives the dialog visual context instead of slamming up on a blank screen).
+  setTimeout(() => maybePromptDesktopShortcut(), 1500)
+
+  // Display safety: when monitors are added/removed/resized at runtime (lid close, dock,
+  // screen resolution change), rescue any window stranded off-screen. Debounced because
+  // display-metrics-changed can fire several times in quick succession.
+  let _rescueTimer = null
+  const scheduleRescue = () => {
+    if (_rescueTimer) clearTimeout(_rescueTimer)
+    _rescueTimer = setTimeout(() => { _rescueTimer = null; rescueStrandedWindows() }, 400)
+  }
+  screen.on('display-removed',         scheduleRescue)
+  screen.on('display-added',           scheduleRescue)
+  screen.on('display-metrics-changed', scheduleRescue)
 })
 app.on('before-quit', () => {
   app.isQuitting = true
@@ -548,6 +640,234 @@ ipcMain.on('pomodoro-panel-cancel', () => {
   hidePomodoroPanel()
 })
 
+// -- Desktop shortcut (Windows .lnk to SilverWolfPet.exe) --
+// Two access points: launcher right-click menu (one-tap toggle) and settings panel
+// (visible state + toggle). Disabled in dev mode because process.execPath there points
+// at node_modules\electron\dist\electron.exe — a shortcut to that won't launch our app.
+const SHORTCUT_NAME = '银狼桌宠.lnk'
+let _desktopFolder = null
+
+function getDesktopFolder() {
+  if (_desktopFolder) return _desktopFolder
+  // Resolve via PowerShell so OneDrive-redirected Desktop is honored. Falls back to
+  // %USERPROFILE%\Desktop if PS is unavailable.
+  try {
+    const out = execSync(
+      `powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`,
+      { timeout: 2500, windowsHide: true }
+    ).toString().trim()
+    if (out) _desktopFolder = out
+  } catch {}
+  if (!_desktopFolder) {
+    _desktopFolder = path.join(process.env.USERPROFILE || os.homedir(), 'Desktop')
+  }
+  return _desktopFolder
+}
+
+function getShortcutPath() {
+  return path.join(getDesktopFolder(), SHORTCUT_NAME)
+}
+
+function shortcutStatus() {
+  const lnk = getShortcutPath()
+  return {
+    supported: app.isPackaged,
+    devMode: !app.isPackaged,
+    exists: (() => { try { return fs.existsSync(lnk) } catch { return false } })(),
+    path: lnk
+  }
+}
+
+function createDesktopShortcut() {
+  if (!app.isPackaged) {
+    return { ok: false, error: '开发模式下不可用 — 需要先 npm run build 打包成 .exe' }
+  }
+  const exe = process.execPath
+  const wd = path.dirname(exe)
+  // Use single-quoted PS strings; double-up any embedded ' to escape.
+  const escape = s => String(s).replace(/'/g, "''")
+  const script = `$Wsh = New-Object -ComObject WScript.Shell
+$Sc = $Wsh.CreateShortcut('${escape(getShortcutPath())}')
+$Sc.TargetPath = '${escape(exe)}'
+$Sc.WorkingDirectory = '${escape(wd)}'
+$Sc.IconLocation = '${escape(exe)},0'
+$Sc.Description = 'Silver Wolf Pet'
+$Sc.Save()
+Write-Output 'OK'`
+  try {
+    const out = runPsScript(script, [], { timeout: 5000 }).toString().trim()
+    if (out.endsWith('OK')) {
+      showCharBubble('桌面图标安排了～', { source: 'shortcut', mood: 'smug', duration: 2500 })
+      return { ok: true, path: getShortcutPath() }
+    }
+    return { ok: false, error: out }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+}
+
+function removeDesktopShortcut() {
+  const lnk = getShortcutPath()
+  try {
+    if (fs.existsSync(lnk)) {
+      fs.unlinkSync(lnk)
+      showCharBubble('快捷方式撤了，桌面清爽了～', { source: 'shortcut', mood: 'default', duration: 2400 })
+      return { ok: true, removed: true }
+    }
+    return { ok: true, removed: false }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+}
+
+// First-run prompt: asks the user once whether to drop a shortcut on the desktop.
+// Skipped in dev mode (no real .exe to point at) and skipped if a shortcut already exists.
+// Either answer flips shortcut_first_run_done so we never re-ask.
+async function maybePromptDesktopShortcut() {
+  if (!app.isPackaged) return
+  if (_state.shortcut_first_run_done) return
+  if (shortcutStatus().exists) {
+    _state.shortcut_first_run_done = true
+    saveStateDebounced()
+    return
+  }
+  try {
+    const { dialog } = require('electron')
+    const parent = alive(sideWin) ? sideWin : (alive(charWin) ? charWin : undefined)
+    const r = await dialog.showMessageBox(parent, {
+      type: 'question',
+      buttons: ['好，放一个', '不用'],
+      defaultId: 0,
+      cancelId: 1,
+      title: '银狼桌宠',
+      message: '要不要在桌面放个快捷方式？',
+      detail: '方便下次直接双击启动。可以随时在 Launcher 右键菜单 / 设置面板里改。'
+    })
+    if (r.response === 0) createDesktopShortcut()
+  } catch (e) {
+    console.error('[shortcut first-run]', e.message)
+  } finally {
+    _state.shortcut_first_run_done = true
+    saveStateDebounced()
+  }
+}
+
+ipcMain.handle('shortcut-status', () => shortcutStatus())
+ipcMain.handle('shortcut-create', () => createDesktopShortcut())
+ipcMain.handle('shortcut-remove', () => removeDesktopShortcut())
+
+// -- File conversion --
+// Drag-drop a file onto the sidebar → main process picks the right converter and writes
+// the output to the same directory. Bubble feedback flows through showCharBubble.
+const converter = require('./services/converter')
+
+// Built once on demand. htmlToPdf opens a hidden BrowserWindow, loads the HTML, and uses
+// printToPDF; pdfToImage opens services/pdf-render.html with nodeIntegration so PDF.js can
+// render each page to a canvas dataURL, then writes one image per page.
+function buildConverterCtx() {
+  return {
+    htmlToPdf: async (html, outPath) => {
+      // Write the HTML to a temp file then loadFile() — significantly more reliable than
+      // loadURL('data:text/html...') which can hit ERR_FAILED on long/CJK content.
+      const tmpHtml = path.join(os.tmpdir(), `sw_h2p_${Date.now()}_${Math.random().toString(36).slice(2,6)}.html`)
+      fs.writeFileSync(tmpHtml, html, 'utf8')
+      const w = new BrowserWindow({
+        show: false,
+        webPreferences: { contextIsolation: true, sandbox: true }
+      })
+      try {
+        await w.loadFile(tmpHtml)
+        const buf = await w.webContents.printToPDF({ printBackground: true, pageSize: 'A4' })
+        fs.writeFileSync(outPath, buf)
+      } finally {
+        try { w.destroy() } catch {}
+        try { fs.unlinkSync(tmpHtml) } catch {}
+      }
+    },
+    pdfToImage: async (srcPath, outPath, fmt) => {
+      const w = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          contextIsolation: false,
+          nodeIntegration: true,
+          sandbox: false
+        }
+      })
+      try {
+        await w.loadFile('services/pdf-render.html')
+        const argsJson = JSON.stringify(srcPath) + ', ' + JSON.stringify(fmt)
+        const result = await w.webContents.executeJavaScript(`window.renderPdf(${argsJson})`)
+        if (!result || result.__error) {
+          throw new Error('PDF 渲染失败：' + (result && result.__error || '未知错误'))
+        }
+        const ext = fmt === 'jpeg' ? 'jpg' : fmt
+
+        // Single-page → write directly to the planned outPath.
+        if (result.length === 1) {
+          const buf = Buffer.from(result[0].split(',')[1], 'base64')
+          fs.writeFileSync(outPath, buf)
+          return  // converter falls through to default outPath handling
+        }
+
+        // Multi-page → wrap into a folder so output doesn't litter the source directory.
+        // Folder name = source basename + suffix; collisions get _1, _2, ...
+        const srcDir = path.dirname(srcPath)
+        const srcBase = path.basename(srcPath, path.extname(srcPath))
+        let folder = path.join(srcDir, `${srcBase}_pages`)
+        let i = 1
+        while (fs.existsSync(folder)) {
+          folder = path.join(srcDir, `${srcBase}_pages_${i}`)
+          i++
+        }
+        fs.mkdirSync(folder, { recursive: true })
+
+        // Page filename width is padded so lexicographic sort matches page order
+        // (page_1.png ... page_99.png is fine; page_100.png with 1-pad is page_1/page_10/page_100 — wrong).
+        const pad = String(result.length).length
+        for (let p = 0; p < result.length; p++) {
+          const buf = Buffer.from(result[p].split(',')[1], 'base64')
+          const name = `page_${String(p + 1).padStart(pad, '0')}.${ext}`
+          fs.writeFileSync(path.join(folder, name), buf)
+        }
+        return { outPath: folder, count: result.length, isFolder: true }
+      } finally {
+        try { w.destroy() } catch {}
+      }
+    }
+  }
+}
+
+ipcMain.handle('convert-targets', (e, srcPath) => {
+  try { return converter.listTargets(srcPath) } catch { return [] }
+})
+
+ipcMain.handle('convert-file', async (e, payload) => {
+  const srcPath = payload && payload.srcPath
+  const target = payload && payload.target
+  if (!srcPath || !fs.existsSync(srcPath)) {
+    showCharBubble('源文件不见了，是闪现到平行宇宙了？', { source: 'converter', mood: 'pout', duration: 3000 })
+    return { ok: false, error: '源文件不存在' }
+  }
+  try {
+    const ctx = buildConverterCtx()
+    const result = await converter.convert(srcPath, target, ctx)
+    if (result.ok) {
+      const name = path.basename(result.outPath)
+      const text = result.isFolder
+        ? `拆了 ${result.count} 页，丢进 ${name}/ 文件夹了～`
+        : `搞定，${name} 扔回原目录了～`
+      showCharBubble(text, { source: 'converter', mood: 'smug', duration: 3500 })
+    } else {
+      showCharBubble(`这转换搞不动：${result.error}`, { source: 'converter', mood: 'pout', duration: 3200 })
+    }
+    return result
+  } catch (err) {
+    const msg = (err && err.message || String(err)).slice(0, 80)
+    showCharBubble(`Bug！${msg}`, { source: 'converter', mood: 'glitch', duration: 3500 })
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
 // -- Controls --
 ipcMain.on('close', () => app.quit())
 ipcMain.on('toggle-sidebar', () => {
@@ -575,10 +895,9 @@ ipcMain.handle('get-sidebar-pos', () => {
 // -- Launcher (floating summon icon) IPC --
 ipcMain.on('launcher-move', (e, { x, y }) => {
   if (!alive(launchWin)) return
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize
-  const cx = Math.max(0, Math.min(width  - LAUNCH_W, x))
-  const cy = Math.max(0, Math.min(height - LAUNCH_H, y))
-  const rx = Math.round(cx), ry = Math.round(cy)
+  // Clamp against the extended desktop bounding box so multi-monitor users can drag the
+  // launcher to a secondary display. Primary-only clamp would snap them back at the seam.
+  const { x: rx, y: ry } = clampToDesktop(x, y, LAUNCH_W, LAUNCH_H)
   launchWin.setPosition(rx, ry)
   if (launcherPosSaveTimer) clearTimeout(launcherPosSaveTimer)
   launcherPosSaveTimer = setTimeout(() => {
@@ -591,6 +910,10 @@ ipcMain.handle('launcher-pos', () => {
 })
 ipcMain.on('launcher-context', () => {
   if (!alive(launchWin)) return
+  const sc = shortcutStatus()
+  const scLabel = !sc.supported
+    ? '桌面快捷方式（打包后可用）'
+    : (sc.exists ? '✓ 移除桌面快捷方式' : '+ 创建桌面快捷方式')
   Menu.buildFromTemplate([
     { label: '设置', click: () => {
         if (!alive(sideWin)) return
@@ -605,6 +928,11 @@ ipcMain.on('launcher-context', () => {
         const d = screen.getPrimaryDisplay().workAreaSize
         launchWin.setPosition(d.width - LAUNCH_W - 20, d.height - LAUNCH_H - 20)
     } },
+    {
+      label: scLabel,
+      enabled: sc.supported,
+      click: () => { sc.exists ? removeDesktopShortcut() : createDesktopShortcut() }
+    },
     { type: 'separator' },
     { label: 'Exit Silver Wolf', click: () => app.quit() },
   ]).popup({ window: launchWin })
