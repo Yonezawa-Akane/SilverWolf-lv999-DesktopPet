@@ -119,6 +119,9 @@ let animTick = 0
 let facingLeft = false
 let cursor   = { x:0, y:0 }
 let clickJob = null  // { screenX, screenY } — actual screen coord to click
+let fleeCooldownUntil = 0  // frame index — proximity flee is suppressed until here. Without
+                            // this, the cursor lingering near her landing spot triggers an
+                            // immediate re-flee → she "trembles" in place. ~3.5s after flee ends.
 
 const QUIPS = ['Aha...','有意思','笑死','...','副本cleared','新任务？','在线','行行行','别过来','检测中','安排','搞定','懂了','嗯']
 let bubTO = null
@@ -188,11 +191,14 @@ function tick() {
   const charCY = pos.y + FH/2
   const cdist  = Math.hypot(cursor.x - charCX, cursor.y - charCY)
 
-  if(cdist < 50 && state !== 'flee' && state !== 'job') {
+  if(cdist < 50 && state !== 'flee' && state !== 'job' && frame >= fleeCooldownUntil) {
     const angle = Math.atan2(charCY - cursor.y, charCX - cursor.x)
     target.x = Math.max(b.minX, Math.min(b.maxX, pos.x + Math.cos(angle)*350))
     target.y = Math.max(b.minY, Math.min(b.maxY, pos.y + Math.sin(angle)*350))
     state='flee'; stTimer=0
+    // ~3.5s cooldown (60fps × ~3.5 ≈ 210). Covers flee duration (~80) + arrival/settle
+    // window so she won't re-flee even if the cursor stays parked in the new area.
+    fleeCooldownUntil = frame + 210
     showBubble(['跑了','闪','别贴','...走了'][Math.floor(Math.random()*4)], 1200)
   } else if(cdist < 90 && state==='hover' && Math.random()<.015) {
     state='react'; stTimer=0
