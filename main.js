@@ -151,6 +151,7 @@ const DEFAULT_STATE = {
     archive_retention_days: 180,    // archived_conversations entries older than this are purged on quit
     proactive_greeting_hours: 8,    // <= 0 disables; otherwise sidebar greets if last_active older than this
     quick_insight_shortcut: 'CommandOrControl+Shift+\\',  // global hotkey for screenshot helper
+    respawn_pet_shortcut: 'CommandOrControl+Alt+W',       // global hotkey to respawn sprite (fullscreen-game alt-tab can demote z-order or hide the always-on-top window)
     ui_scale: 1.0                   // webContents.setZoomFactor applied to every window; 0.9 / 1.0 / 1.15 / 1.3 from settings
   },
   learned_apps: {},
@@ -502,6 +503,16 @@ app.whenReady().then(() => {
     console.error('[shortcut] 注册异常', e.message)
   }
 
+  // Respawn-pet hotkey — recovers sprite from fullscreen-game alt-tab z-order demotion.
+  const respawnAccel = (_state && _state.preferences && _state.preferences.respawn_pet_shortcut) || 'CommandOrControl+Alt+W'
+  try {
+    const ok = globalShortcut.register(respawnAccel, respawnPet)
+    if (!ok) console.error('[shortcut] respawn 注册失败：可能被其他应用占用', respawnAccel)
+    else console.log('[shortcut] respawn 已注册', respawnAccel)
+  } catch (e) {
+    console.error('[shortcut] respawn 注册异常', e.message)
+  }
+
   // Resume pomodoro across restart. If the elapsed time has already eaten the entire
   // work+break cycle, mark the session done silently — no point firing a stale notif.
   if (_state.pomodoro && _state.pomodoro.running) {
@@ -558,6 +569,64 @@ app.on('second-instance', () => {
   if (alive(charWin) && !charWin.isVisible()) charWin.show()
   if (alive(launchWin) && !launchWin.isVisible()) launchWin.show()
 })
+
+// -- Respawn sprite --
+// Fullscreen DirectX games / RDP / lock screen often steal the always-on-top "screen-saver"
+// z-order from the character window. After alt-tab the sprite ends up either invisible
+// (covered) or pushed off the visible workArea. This handler:
+//   1. Recreates charWin if it was destroyed (rare; usually only via dev hot-reload).
+//   2. Toggles alwaysOnTop off→on at 'screen-saver' level — this forces Windows to re-anchor
+//      the z-order. Just calling moveTop() is not enough on demoted windows.
+//   3. Recenters at the bottom of the primary display if the sprite drifted off-screen.
+//   4. Calls show() if hidden, then moveTop() to bring above any leftover windows.
+// Bound to a global shortcut so the user can fire it from inside any app, including a
+// re-focused game window. Only respawns the sprite (charWin) — sidebar / launcher /
+// pomodoro / helper are untouched (the user's "纯 sprite" requirement).
+function respawnPet() {
+  const d = screen.getPrimaryDisplay()
+  const { width, height } = d.workAreaSize
+  const defaultX = Math.floor((width - 240) / 2)
+  const defaultY = height - CHAR_WIN_H
+
+  // Case 1: charWin destroyed → recreate from scratch with same config as createWindows.
+  if (!alive(charWin)) {
+    charWin = new BrowserWindow({
+      width: CHAR_WIN_W, height: CHAR_WIN_H,
+      x: defaultX, y: defaultY,
+      frame: false, transparent: true,
+      alwaysOnTop: true, resizable: false,
+      skipTaskbar: true, hasShadow: false,
+      webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
+    })
+    charWin.loadFile('renderer/character.html')
+    charWin.setAlwaysOnTop(true, 'screen-saver')
+    try {
+      const z = (_state && _state.preferences && _state.preferences.ui_scale) || 1.0
+      charWin.webContents.once('did-finish-load', () => { try { charWin.webContents.setZoomFactor(z) } catch {} })
+    } catch {}
+    return
+  }
+
+  // Case 2-4: window exists but z-order or visibility broken
+  try { charWin.setAlwaysOnTop(false) } catch {}
+  try { charWin.setAlwaysOnTop(true, 'screen-saver') } catch {}
+
+  // Recenter if sprite drifted entirely outside the primary work area
+  try {
+    const b = charWin.getBounds()
+    const offscreen =
+      b.x + b.width  < 5 || b.y + b.height < 5 ||
+      b.x > width - 5    || b.y > height - 5
+    if (offscreen) charWin.setPosition(defaultX, defaultY)
+  } catch {}
+
+  if (!charWin.isVisible()) charWin.show()
+  try { charWin.moveTop() } catch {}
+
+  // In-character feedback — confirms the hotkey actually fired even if the sprite
+  // was already on top (helps user diagnose vs. nothing happened).
+  showCharBubble('补丁打好了，重连成功～', { source: 'respawn', mood: 'smug', duration: 2000 })
+}
 
 // -- Quick-Insight: capture screen + show helper near cursor --
 async function triggerQuickInsight() {

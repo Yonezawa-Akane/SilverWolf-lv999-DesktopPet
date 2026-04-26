@@ -4,6 +4,18 @@
 
 ---
 
+## [2.1.5] — 2026-04-26
+
+### 新增 / Added
+
+- **召回银狼全局热键 `Ctrl+Alt+W`** —— 全屏 DirectX 游戏 alt-tab、远程桌面、锁屏后，always-on-top 的 `screen-saver` z-order 经常被系统踢掉，银狼会被覆盖或漂到工作区外。新热键会把窗口 alwaysOnTop off→on 重新锚定到 `screen-saver` 层、检测越界后回到主屏底部居中、必要时重建窗口。可在 `state.preferences.respawn_pet_shortcut` 自定义。
+
+### 修复 / Fixed
+
+- **下载的 release zip 在 Windows 资源管理器里报"无效，无法完成提取"** —— PowerShell 5.1 的 `Compress-Archive` 写入非 ASCII 文件名（如 `使用说明书.md` / `快速开始.txt`）时用本机代码页（中文 Windows 是 GBK）但不设 zip 头里的 UTF-8 标志位，Windows 11 资源管理器严格校验时会拒绝整个包。改用 `[System.IO.Compression.ZipFile]::CreateFromDirectory` 显式传 `Encoding.UTF8`，正确写入 bit 11。
+
+---
+
 ## [2.1.4] — 2026-04-26
 
 ### 修复 / Fixed

@@ -25,6 +25,7 @@
 - **银狼角色**（崩坏：星穹铁道）—— 基于 GitHub 上开源的 `花火.skill` 蒸馏方案构建，完整人格通过 skill 蒸馏注入。对她而言，这世界不过是一场要打到极限通关的游戏
 - **长期记忆**横跨多次会话：facts / 每日总结 / 180 天对话归档 / 跨日主动问候
 - **全局截屏热键** `Ctrl+Shift+\` —— 5 种分析模式：解释 / 翻译 / 调试 / OCR / 总结
+- **召回银狼热键** `Ctrl+Alt+W` —— 全屏游戏 alt-tab 后宠物 z-order 被踢看不见时，一键拉回前台并重置位置
 - **番茄钟** —— 屏幕右上悬浮倒计时面板，阶段切换由银狼语音化播报
 - **应用启动器** —— 五级回退策略（开始菜单 → 桌面快捷方式 → 桌面模糊匹配 → 开始菜单模糊匹配 → 卸载注册表），常见 Windows 安装下命中率 ~95%
 - **中英应用别名互通**（微信 ↔ WeChat / QQ音乐 ↔ QQMusic 等）
@@ -117,6 +118,7 @@ A floating desktop pet with full character persona, screen-aware shortcuts, cros
 - **银狼 character** (Honkai: Star Rail) — built on the open-source `花火.skill` distillation from GitHub; full persona injected via skill distillation. To her, the world is just a game to be played to its limits
 - **Long-term memory** across sessions: facts / daily summaries / 180-day conversation archive / proactive cross-day greeting
 - **Global screenshot hotkey** (`Ctrl+Shift+\`) with 5 analysis modes: explain / translate / debug / OCR / summarize
+- **Respawn-pet hotkey** (`Ctrl+Alt+W`) — pulls Silver Wolf back to the foreground and resets her position when fullscreen-game alt-tab demotes her z-order off-screen
 - **Pomodoro** with floating top-right countdown panel and Silver-Wolf-voiced phase transitions
 - **App launching** with 5-tier fallback strategy (StartMenu → Desktop `.lnk` → Desktop contains → StartMenu contains → Uninstall registry) hitting ~95% on typical Windows installs
 - **Bilingual app aliases** (微信↔WeChat / QQ音乐↔QQMusic / etc.)
