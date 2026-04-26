@@ -159,18 +159,18 @@ html, body {
   display:flex; flex-wrap:wrap; gap:4px; padding:4px 7px 2px;
 }
 .qb {
-  flex:1 1 80px; padding:4px 4px; cursor:pointer;
-  font-family:'Press Start 2P',monospace; font-size:5.5px;
+  flex:1 1 80px; padding:5px 6px; cursor:pointer;
+  font-family:'Noto Sans SC',sans-serif; font-size:11px;
   letter-spacing:.3px; text-align:center; transition:all .18s;
   background:rgba(10,6,32,.95);
   border:1px solid var(--pur);
   clip-path:polygon(0 4px,4px 0,calc(100%-4px) 0,100% 4px,100% calc(100%-4px),calc(100%-4px) 100%,4px 100%,0 calc(100%-4px));
   color:var(--purLL);
-  display:flex; align-items:center; justify-content:center; gap:4px;
+  display:flex; align-items:center; justify-content:center; gap:5px;
   white-space:nowrap; min-width:0; overflow:hidden;
 }
 .qb:hover{background:rgba(124,58,237,.2);color:#fff;}
-.qi{font-size:7px;}
+.qi{font-size:9px;color:var(--cyanL);}
 
 /* ── NAME TAG ── */
 #nametag-row {
@@ -187,7 +187,7 @@ html, body {
   box-shadow:0 0 8px var(--gPk);
 }
 #nametag .nt-plus{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--pink);}
-#nametag .nt-name{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--text);letter-spacing:1px;}
+#nametag .nt-name{font-family:'Noto Sans SC',sans-serif;font-size:11px;color:var(--text);letter-spacing:1px;font-weight:500;}
 .tag-deco{font-family:'Press Start 2P',monospace;font-size:5px;color:rgba(124,58,237,.35);}
 
 /* ── DIALOG BOX ── */
@@ -287,8 +287,18 @@ textarea:focus{border-bottom-color:var(--purL);}
 .si:focus{border-color:var(--purL);}
 .sb2{width:100%;padding:8px;cursor:pointer;background:rgba(124,58,237,.15);
   border:1px solid var(--purL);border-radius:6px;
-  color:var(--purLL);font-family:'Press Start 2P',monospace;font-size:7px;transition:all .2s;}
+  color:var(--purLL);font-family:'Noto Sans SC',sans-serif;font-size:11px;letter-spacing:.5px;transition:all .2s;}
 .sb2:hover{background:rgba(124,58,237,.32);color:#fff;}
+
+/* UI scale picker — 4 buttons in a row, active one highlighted cyan */
+.scale-row{display:flex;gap:4px;margin-bottom:6px;}
+.scale-row .sb-scale{flex:1;padding:6px 4px;cursor:pointer;border-radius:5px;
+  background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.35);
+  color:var(--purLL);font-family:'Noto Sans SC',sans-serif;font-size:10px;
+  transition:all .15s;text-align:center;user-select:none;}
+.scale-row .sb-scale:hover{background:rgba(124,58,237,.25);color:#fff;}
+.scale-row .sb-scale.active{background:rgba(34,211,238,.3);border-color:var(--cyan);
+  color:#fff;box-shadow:0 0 8px rgba(34,211,238,.4);}
 
 /* ============================================================
    TABS
@@ -479,10 +489,11 @@ textarea:focus{border-bottom-color:var(--purL);}
   border-bottom:1px dashed rgba(124,58,237,.15);
 }
 .manual-h {
-  font-family:'Press Start 2P',monospace;
-  font-size:7px;
+  font-family:'Noto Sans SC',sans-serif;
+  font-size:13px;
+  font-weight:600;
   color:var(--pinkL);
-  letter-spacing:1.5px;
+  letter-spacing:.8px;
   margin-bottom:6px;
   padding-bottom:3px;
   border-bottom:1px solid rgba(224,64,251,.2);
@@ -692,7 +703,7 @@ textarea:focus{border-bottom-color:var(--purL);}
   <!-- MANUAL PANE -->
   <div id="manual-pane" class="pane" hidden>
     <div class="pane-header">
-      // CHEATSHEET // v2.1
+      // CHEATSHEET //
       <button class="manual-open-btn" onclick="window.sw.openManual()">📖 打开完整说明书</button>
     </div>
     <div class="manual-section">
@@ -722,7 +733,7 @@ textarea:focus{border-bottom-color:var(--purL);}
       <div class="manual-row"><span class="kbd">5 总结</span><span>压缩长内容</span></div>
     </div>
     <div class="manual-section">
-      <div class="manual-h">文件转换 ✨ NEW v2.1</div>
+      <div class="manual-h">文件转换</div>
       <div class="manual-row"><span class="kbd">拖文件到 sidebar</span><span>弹菜单选目标格式 / 操作</span></div>
       <div class="manual-row"><span class="kbd">PDF</span><span>→ TXT / Word / 图片 ；✂ 拆分；↻ 旋转 90°</span></div>
       <div class="manual-row"><span class="kbd">Word / MD / HTML</span><span>互转 + → PDF</span></div>
@@ -793,6 +804,13 @@ textarea:focus{border-bottom-color:var(--purL);}
   <div class="sd">Anthropic API Key<br>本地存储，不上传</div>
   <input class="si" id="ki" type="password" placeholder="sk-ant-..."/>
   <button class="sb2" onclick="saveKey()">▶ SAVE</button>
+  <div class="sd" style="margin-top:10px">字号 / UI Scale<br>所有窗口同步</div>
+  <div class="scale-row">
+    <span class="sb-scale" data-scale="0.9"  onclick="setUiScale(0.9)">小</span>
+    <span class="sb-scale" data-scale="1.0"  onclick="setUiScale(1.0)">默认</span>
+    <span class="sb-scale" data-scale="1.15" onclick="setUiScale(1.15)">大</span>
+    <span class="sb-scale" data-scale="1.3"  onclick="setUiScale(1.3)">特大</span>
+  </div>
   <button class="sb2" id="sc-btn" onclick="toggleShortcut()" style="background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.4);color:var(--cyanL);">⏳ 检查桌面快捷方式…</button>
   <button class="sb2" style="background:rgba(80,20,20,.4);border-color:rgba(239,68,68,.4);color:rgba(255,140,140,.9);" onclick="clearHist()">⌧ 清空对话历史</button>
   <button class="sb2" style="background:transparent;border-color:rgba(124,58,237,.2);color:var(--textD);font-size:6px;" onclick="hideSettings()">✕ CANCEL</button>
@@ -840,8 +858,26 @@ document.addEventListener('mouseup', ()=>{ dragging=false })
 let scr = { scale:1 }
 const getKey=()=>localStorage.getItem('sw_key')||''
 function saveKey(){const k=document.getElementById('ki').value.trim();if(k){localStorage.setItem('sw_key',k);hideSettings();addMsg('ai','KEY ACCEPTED. 接入。')}}
-function showSettings(){document.getElementById('ki').value=getKey();document.getElementById('settings').classList.add('show');refreshShortcutBtn()}
+function showSettings(){document.getElementById('ki').value=getKey();document.getElementById('settings').classList.add('show');refreshShortcutBtn();refreshUiScaleBtns()}
 function hideSettings(){document.getElementById('settings').classList.remove('show')}
+
+// UI scale picker — highlights the button matching state.preferences.ui_scale and tells main
+// to apply the new value (which persists + zooms every window).
+async function refreshUiScaleBtns() {
+  let cur = 1.0
+  try {
+    const s = await window.sw.getState()
+    cur = (s && s.preferences && s.preferences.ui_scale) || 1.0
+  } catch {}
+  document.querySelectorAll('.scale-row .sb-scale').forEach(b => {
+    b.classList.toggle('active', Math.abs(parseFloat(b.dataset.scale) - cur) < 0.001)
+  })
+}
+async function setUiScale(scale) {
+  try { await window.sw.setUiScale(scale) } catch {}
+  // Don't await refresh inside setUiScale — let zoom apply first, then re-mark active.
+  setTimeout(refreshUiScaleBtns, 50)
+}
 
 // Desktop shortcut toggle: refreshes label/state from main on every settings open so
 // out-of-band changes (created via launcher menu, manually deleted) stay in sync.
