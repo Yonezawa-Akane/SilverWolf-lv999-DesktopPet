@@ -11,6 +11,7 @@
 - **Launcher 在不同分辨率电脑上消失** — 上次保存的位置（例如外接 4K 显示器右屏）拿到笔记本小屏上时，launcher 会落在屏幕外不可见。现在启动时校验保存坐标是否仍在某个显示器内，越界则自动回到主屏右下角
 - **拔掉外接显示器后窗口卡在原位** — 监听 `display-removed` / `display-added` / `display-metrics-changed`，运行时自动救回所有越界窗口（launcher / 银狼 / sidebar / helper / pomodoro）
 - **多显示器下 launcher 没法拖到副屏** — 之前 drag 只 clamp 在主屏内，导致拖到副屏时被拉回；现在按"扩展桌面 bounding box" clamp，可自由跨屏
+- **打包后启动报 `Cannot find module ...index.js`** — 旧 build script 用 CLI `--ignore=^/dist`，cmd.exe 把 `^` 当转义符吃掉，正则退化为 `/dist` 无锚点，误杀了 `node_modules/<pkg>/dist/` 子目录，导致 html-to-docx 等运行时依赖的入口文件丢失。改为 `scripts/build.js` 程序化调用 `@electron/packager`，传 `RegExp` 对象，绕开 shell 转义
 
 ---
 
