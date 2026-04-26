@@ -44,4 +44,9 @@ contextBridge.exposeInMainWorld('sw', {
   onPomodoroTick:       (cb)      => ipcRenderer.on('pomodoro-tick', (e, d) => cb(d)),
   cancelPomodoroFromPanel: ()     => ipcRenderer.send('pomodoro-panel-cancel'),
   openManual:           ()        => ipcRenderer.send('open-manual'),
+  convertFile:          (srcPath, target) => ipcRenderer.invoke('convert-file', { srcPath, target }),
+  convertTargets:       (srcPath)         => ipcRenderer.invoke('convert-targets', srcPath),
+  shortcutStatus:       ()        => ipcRenderer.invoke('shortcut-status'),
+  shortcutCreate:       ()        => ipcRenderer.invoke('shortcut-create'),
+  shortcutRemove:       ()        => ipcRenderer.invoke('shortcut-remove'),
 })

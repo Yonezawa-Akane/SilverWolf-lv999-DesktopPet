@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SW PDF Render</title>
+<style>body{margin:0;background:#000;}</style>
+</head>
+<body>
+<canvas id="c" style="display:none"></canvas>
+<script>
+// Hidden internal window — only loaded by main.js with nodeIntegration:true to render
+// PDF pages to PNG/JPEG dataURLs and return them to the main process.
+//
+// We pull pdfjs-dist via node `require` (path resolves through node_modules) instead of
+// a <script src="../node_modules/..."> tag, because relative file:// asset loading from
+// HTML can fail in some Electron security configurations. require() goes through Node's
+// own resolver and works in both dev and packaged builds.
+const fs = require('fs')
+const path = require('path')
+const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js')
+
+// Worker can be the same legacy build — disable separate worker by pointing to a fake URL
+// only if you want to run inline; here we set the real worker file path.
+pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.js')
+
+window.renderPdf = async function (srcPath, fmt) {
+  try {
+    const data = new Uint8Array(fs.readFileSync(srcPath))
+    const pdf = await pdfjsLib.getDocument({ data, isEvalSupported: false, disableFontFace: false }).promise
+    const out = []
+    const canvas = document.getElementById('c')
+    const ctx = canvas.getContext('2d')
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i)
+      const vp = page.getViewport({ scale: 2 })
+      canvas.width = Math.floor(vp.width)
+      canvas.height = Math.floor(vp.height)
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      await page.render({ canvasContext: ctx, viewport: vp }).promise
+      out.push(canvas.toDataURL('image/' + fmt, fmt === 'jpeg' ? 0.92 : undefined))
+    }
+    return out
+  } catch (e) {
+    return { __error: e && e.message || String(e) }
+  }
+}
+</script>
+</body>
+</html>

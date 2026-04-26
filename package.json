@@ -1,15 +1,26 @@
 {
   "name": "silver-wolf-pet",
-  "version": "2.0.0",
+  "version": "2.1.1",
   "description": "Silver Wolf Shimeji Desktop Pet",
   "main": "main.js",
   "author": "Fan Project",
   "scripts": {
     "start": "electron .",
-    "build": "electron-packager . SilverWolfPet --platform=win32 --arch=x64 --out=dist --overwrite --icon=assets/icon.ico --electron-version=28.3.3 --ignore=node_modules --ignore=dist --ignore=^/scripts --ignore=^/docs --ignore=^/build\\.bat$ --ignore=^/\\.claude --ignore=^/assets/launcher_raw\\.png$ --ignore=^/assets/sw_side\\.png$ --ignore=^/assets/sw_sprite\\.png$ --ignore=^/assets/sw_sprite_flip\\.png$"
+    "build": "electron-packager . SilverWolfPet --platform=win32 --arch=x64 --out=dist --overwrite --icon=assets/icon.ico --electron-version=28.3.3 --ignore=^/dist --ignore=^/scripts --ignore=^/docs --ignore=^/build\\.bat$ --ignore=^/\\.claude --ignore=^/assets/launcher_raw\\.png$ --ignore=^/assets/sw_side\\.png$ --ignore=^/assets/sw_sprite\\.png$ --ignore=^/assets/sw_sprite_flip\\.png$"
   },
   "devDependencies": {
-    "electron": "^28.3.3",
-    "@electron/packager": "^18.3.5"
+    "@electron/packager": "^18.3.5",
+    "electron": "^28.3.3"
+  },
+  "dependencies": {
+    "html-to-docx": "^1.8.0",
+    "jimp": "^0.22.12",
+    "mammoth": "^1.12.0",
+    "marked": "^18.0.2",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^3.11.174",
+    "turndown": "^7.2.4",
+    "xlsx": "^0.18.5"
   }
 }
