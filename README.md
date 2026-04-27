@@ -1,6 +1,6 @@
 # Silver Wolf Pet · 银狼lv.999 桌宠
 
-**Version 2.2.0** · [更新日志 / Changelog](./CHANGELOG.md)
+**Version 2.2.1** · [更新日志 / Changelog](./CHANGELOG.md)
 
 > ⚠️ **Fan Project Disclaimer / 粉丝项目免责声明**
 >

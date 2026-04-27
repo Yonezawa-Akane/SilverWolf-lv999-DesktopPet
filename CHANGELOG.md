@@ -4,6 +4,53 @@
 
 ---
 
+## [2.2.1] — 2026-04-27 · **测试版 / Pre-release**
+
+> ⚠ 本版本为 v2.2 主线的首个发布候选，核心 voice 链路在主流 Windows 11 + 麦克风配置下已通过功能验证；公开发布给少量用户实测识别准度、热键稳定性、跨设备兼容性。生产稳定版（v2.2.x）取决于本测试反馈。
+
+### 新增 / Added
+
+- **PTT 离线语音输入** —— 全局热键说话直接发消息到聊天，本地 [SenseVoice-Small](https://github.com/FunAudioLLM/SenseVoice) 模型转写（中英粤日韩五语种、~70ms 推理、零网络）。识别效果等价于"用户手敲完话按回车"，无缝接入现有 agentic 循环。
+  - **toggle 模式**（默认 `Ctrl+Alt+V`）：按一次开麦、再按一次结束。Electron `globalShortcut` 单触发；加 300ms 去抖防 OS 自动连发反复触发 start/stop
+  - **hold 模式**（按住说话，Discord 风格，opt-in）：基于 `uiohook-napi` 低级钩子；部分 Windows 配置下钩子可能被 OS 摘掉，所以默认是 toggle
+  - **设置面板支持录制式自定义热键** —— PTT / 截屏 / 召回三个全局热键都能改；按下「⏺ 录制」再按新组合即生效，自动验 OS 冲突 + 暂停其他绑定避免被吃键
+  - **强制结束录音**按钮：万一卡死可一键恢复
+- **第三方组件许可声明** —— [docs/THIRD_PARTY_LICENSES.md](./docs/THIRD_PARTY_LICENSES.md) 列出全部 npm 依赖、ASR 引擎、SenseVoice 模型权重各自的开源协议；FunASR Model License 单独说明
+- **使用说明书 §4.10「语音对话 PTT」** —— 完整流程 / 模式对比 / 热键自定义 / 模型下载位置 / 已知限制
+- **sidebar 内置 cheatsheet「语音对话」小节** —— 快速参考所有 PTT 操作
+
+### 改动 / Changed
+
+- **`saveStateDebounced` 改异步写盘**（`fs.writeFile` 替代 `fs.writeFileSync`）—— hold 模式下按住热键 ~500ms 时同步写盘正好阻塞主线程 50–200ms，期间 libuiohook 的 WH_KEYBOARD_LL 钩子触发 Windows `LowLevelHooksTimeout` 被静默摘除，导致 keyup 永远收不到。`before-quit` 关机写盘仍保持同步以确保落盘
+- **sidebar 窗口启动预热** —— `createWindows` 阶段 off-screen `showInactive` 然后 `hide`，让首次用户触发的 sidebar 显示不再阻塞主线程 1–2s（同一阻塞窗口期是 hold 模式钩子被摘的另一个诱因）
+- **README + 使用说明书 + 快速开始 + 版本号 → 2.2.1**
+
+### 修复 / Fixed
+
+- **toggle 模式按住热键变成连发** —— OS 自动连发 ~33ms 一次，原版 toggle callback 每次都翻 `_pttToggleActive`，长按 3s 会触发 90 次 start/stop。加模块级 `_lastTogglePressTime` 300ms 去抖
+- **hold 模式 listener 切模式后累积** —— `uIOhook.on()` 没有 `off()` 对应；切 hold↔toggle 多次会重复挂 handler，每次按键 callback 跑 N 次。重构成「启动时一次性安装、handler 内 spec/mode 双重 gate」的形式
+- **改热键后立即生效** —— `_reregisterShortcut` / `pause-capture` / `resume-capture` 三处把模式判断从永不复位的 `_pttUiohookStarted` 改为读 `_state.preferences.voice_input_mode`，避免「切到 toggle 后改热键还在 hold 分支」
+- **state.json 里 `voice_input_enabled=false` 后 PTT 永久卡死** —— init 成功后无条件重置为 true，从历史持久化故障恢复
+
+### 安全网 / Safety nets（hold 模式专用）
+
+- **modifier 静默 watchdog**：若 `_pttPressed=true` 但 3s 内无任何 uiohook 事件，强制 `onPttUp()` 释放（应付钩子被摘的极端场景）
+- **mouse-event modifier watchdog**：用户讲完话挪鼠标时，`mousemove` 事件携带的 `ctrlKey/altKey` 实时标志位能反查"漏 keyup"的释放
+- **re-press detection**：按住中又按一次相同组合（且中间发生过任意 keyup）→ 视为想停止，绕开漏掉的 keyup
+- **Escape panic-stop** + 30s 硬上限 + 设置面板的强制结束按钮 —— 多重兜底
+
+### 资源 / Assets
+
+- **语音模型权重 `model.int8.onnx` (~234MB) 不入库**；用户按 [docs/voice-input-spec.md §8.1](./docs/voice-input-spec.md) 单独下载到 `assets/models/sense-voice/`
+- `tokens.txt` (~25KB)、`hotwords.txt`（项目专有词热词表）、`LICENSE.txt`（FunASR 协议）入库
+
+### 已知限制 / Known Limits
+
+- 当前 sherpa-onnx-node 上 SenseVoice 仅支持 `greedy_search` 解码，**hotwords 实际不生效**（启动时会自动 fallback 到无 hotwords 配置 + warning 日志）。等上游 sherpa 对 SenseVoice 加 `modified_beam_search` 后 `hotwords.txt` 自动启用，无需改代码
+- hold 模式在装了某些杀毒软件 / 第三方 IME / RDP 远程桌面环境下，钩子仍可能被摘。检测到 3s 静默会自动降级释放，不会卡死，但识别会丢这次输入。**生产环境推荐保留 toggle 默认。**
+
+---
+
 ## [2.1.5] — 2026-04-26
 
 ### 新增 / Added
