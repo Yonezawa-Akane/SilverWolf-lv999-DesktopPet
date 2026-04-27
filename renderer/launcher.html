@@ -52,6 +52,17 @@ body.active #core img { display:none; }
   50%     { transform:scale(1.08); opacity:.85; }
 }
 
+/* PTT 录音中：halo 加速 + cyan 主调，让用户在视野角余光也能看到状态变化 */
+body.voice-active #halo {
+  animation:halo 1.0s ease-in-out infinite;
+  background:linear-gradient(135deg, var(--cyan), var(--pink));
+  opacity:.85;
+}
+body.voice-active #core {
+  border-color:var(--cyan);
+  filter:drop-shadow(0 0 10px var(--cyan));
+}
+
 body:not(.dragging):hover #core {
   transform:scale(1.12);
   filter:drop-shadow(0 0 10px var(--purL));
@@ -200,4 +211,10 @@ function spawnBurst() {
 }
 
 init()
+
+if (window.sw && window.sw.onVoiceActive) {
+  window.sw.onVoiceActive(v => {
+    document.body.classList.toggle('voice-active', !!v)
+  })
+}
 </script></body></html>

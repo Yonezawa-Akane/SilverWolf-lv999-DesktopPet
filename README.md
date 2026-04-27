@@ -1,6 +1,6 @@
 # Silver Wolf Pet · 银狼lv.999 桌宠
 
-**Version 2.1.4** · [更新日志 / Changelog](./CHANGELOG.md)
+**Version 2.2.0** · [更新日志 / Changelog](./CHANGELOG.md)
 
 > ⚠️ **Fan Project Disclaimer / 粉丝项目免责声明**
 >
@@ -38,6 +38,11 @@
   - Excel (XLSX/XLS) ↔ PDF / HTML / CSV
   - 多文件输出自动包文件夹
 - **桌面快捷方式**（v2.1） —— 首次运行 `.exe` 弹窗询问是否创建；Launcher 右键 / 设置面板可随时切换。兼容 OneDrive 重定向桌面
+- **PTT 语音输入**（v2.2） —— 全局热键说话直接发消息，本地 [SenseVoice-Small](https://github.com/FunAudioLLM/SenseVoice) 离线识别（中英粤日韩，~70ms 推理，0 网络）。两种模式：
+  - 📣 **toggle**（默认，全平台稳定）：按一次开麦、再按一次结束
+  - 🎙️ **hold**（按住说话，Discord 风格）：依赖 `uiohook-napi` 低级钩子，部分 Windows 配置可能不稳，可在设置面板中切换
+  - 设置面板支持改 PTT / 截屏 / 召回三个全局热键的录制式自定义
+  - 模型权重 ~234MB **不入库**，按 [docs/voice-input-spec.md §8.1](./docs/voice-input-spec.md) 单独下载到 `assets/models/sense-voice/`
 - **银狼 lv.999 骇客风格悬浮面板**：六边形启动按钮 / 截屏洞察 HUD / 番茄钟覆层
 
 ### 系统要求
@@ -139,6 +144,11 @@ A floating desktop pet with full character persona, screen-aware shortcuts, cros
   - Excel (XLSX/XLS) ↔ PDF / HTML / CSV
   - Multi-file output is auto-wrapped in a folder
 - **Desktop shortcut** (v2.1) — first-run `.exe` prompts whether to create one; toggle anytime from launcher right-click or settings panel. OneDrive-redirected Desktop is honored
+- **PTT voice input** (v2.2) — global hotkey to dictate messages straight into chat, transcribed offline by [SenseVoice-Small](https://github.com/FunAudioLLM/SenseVoice) (zh / en / yue / ja / ko, ~70ms inference, zero network). Two modes:
+  - 📣 **toggle** (default, stable everywhere): press once to start, again to stop
+  - 🎙️ **hold-to-talk** (Discord-style): uses `uiohook-napi` low-level hook; can be flaky on some Windows setups, switchable from settings
+  - Settings panel supports record-style custom rebinds for PTT / screenshot / respawn shortcuts
+  - Model weights (~234MB) are **not bundled** — download separately into `assets/models/sense-voice/` per [docs/voice-input-spec.md §8.1](./docs/voice-input-spec.md)
 - **Silver Wolf lv.999 hacker-styled floating panels**: hexagonal launcher button, screenshot insight HUD, pomodoro overlay
 
 ### Requirements
