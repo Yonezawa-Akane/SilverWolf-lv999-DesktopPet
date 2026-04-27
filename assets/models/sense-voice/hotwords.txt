@@ -1,0 +1,49 @@
+# 银狼 / 星穹铁道 IP 词
+银狼
+星核猎手
+模拟宇宙
+星穹铁道
+崩坏星穹铁道
+米哈游
+HoYoverse
+花火
+
+# 项目自身
+桌宠
+silver-wolf-pet
+
+# 用户常说的 AI / LLM 厂商
+Anthropic
+Claude
+Sonnet
+ChatGPT
+OpenAI
+LLM
+prompt
+token
+
+# 技术术语
+GitHub
+API
+debug
+React
+TypeScript
+JavaScript
+Python
+Electron
+sherpa
+SenseVoice
+npm
+PR
+merge
+
+# 应用名（启动器场景）
+微信
+QQ音乐
+网易云音乐
+钉钉
+VS Code
+Chrome
+Photoshop
+OBS
+Steam

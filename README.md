@@ -1,6 +1,6 @@
 # Silver Wolf Pet · 银狼lv.999 桌宠
 
-**Version 2.1.4** · [更新日志 / Changelog](./CHANGELOG.md)
+**Version 2.2.0** · [更新日志 / Changelog](./CHANGELOG.md)
 
 > ⚠️ **Fan Project Disclaimer / 粉丝项目免责声明**
 >
@@ -38,6 +38,11 @@
   - Excel (XLSX/XLS) ↔ PDF / HTML / CSV
   - 多文件输出自动包文件夹
 - **桌面快捷方式**（v2.1） —— 首次运行 `.exe` 弹窗询问是否创建；Launcher 右键 / 设置面板可随时切换。兼容 OneDrive 重定向桌面
+- **PTT 语音输入**（v2.2） —— 全局热键说话直接发消息，本地 [SenseVoice-Small](https://github.com/FunAudioLLM/SenseVoice) 离线识别（中英粤日韩，~70ms 推理，0 网络）。两种模式：
+  - 📣 **toggle**（默认，全平台稳定）：按一次开麦、再按一次结束
+  - 🎙️ **hold**（按住说话，Discord 风格）：依赖 `uiohook-napi` 低级钩子，部分 Windows 配置可能不稳，可在设置面板中切换
+  - 设置面板支持改 PTT / 截屏 / 召回三个全局热键的录制式自定义
+  - 模型权重 ~234MB **不入库**，按 [docs/voice-input-spec.md §8.1](./docs/voice-input-spec.md) 单独下载到 `assets/models/sense-voice/`
 - **银狼 lv.999 骇客风格悬浮面板**：六边形启动按钮 / 截屏洞察 HUD / 番茄钟覆层
 
 ### 系统要求
@@ -103,6 +108,14 @@ MIT 许可证。详见 [LICENSE](./LICENSE)。
 
 代码原作以 MIT 协议开源。**角色 IP 版权归米哈游所有**，MIT 协议不授予角色相关的任何 IP 权利。
 
+### 第三方组件声明
+
+本项目集成了多个第三方组件（npm 依赖、ASR 引擎、SenseVoice 语音模型权重等），各自保留原始协议（MIT / BSD-2-Clause / Apache-2.0 / FunASR Model License）。
+
+**完整清单与各协议条款见** [docs/THIRD_PARTY_LICENSES.md](./docs/THIRD_PARTY_LICENSES.md)。
+
+特别说明：语音输入功能使用 **FunAudioLLM/SenseVoice-Small** 模型，该模型采用 [FunASR Model License](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE)（非标准 OSI 协议，但允许商用与再分发）。模型权重文件请按 [docs/voice-input-spec.md §8.1](./docs/voice-input-spec.md) 单独下载。
+
 ---
 
 ## 🇬🇧 English Documentation
@@ -131,6 +144,11 @@ A floating desktop pet with full character persona, screen-aware shortcuts, cros
   - Excel (XLSX/XLS) ↔ PDF / HTML / CSV
   - Multi-file output is auto-wrapped in a folder
 - **Desktop shortcut** (v2.1) — first-run `.exe` prompts whether to create one; toggle anytime from launcher right-click or settings panel. OneDrive-redirected Desktop is honored
+- **PTT voice input** (v2.2) — global hotkey to dictate messages straight into chat, transcribed offline by [SenseVoice-Small](https://github.com/FunAudioLLM/SenseVoice) (zh / en / yue / ja / ko, ~70ms inference, zero network). Two modes:
+  - 📣 **toggle** (default, stable everywhere): press once to start, again to stop
+  - 🎙️ **hold-to-talk** (Discord-style): uses `uiohook-napi` low-level hook; can be flaky on some Windows setups, switchable from settings
+  - Settings panel supports record-style custom rebinds for PTT / screenshot / respawn shortcuts
+  - Model weights (~234MB) are **not bundled** — download separately into `assets/models/sense-voice/` per [docs/voice-input-spec.md §8.1](./docs/voice-input-spec.md)
 - **Silver Wolf lv.999 hacker-styled floating panels**: hexagonal launcher button, screenshot insight HUD, pomodoro overlay
 
 ### Requirements
@@ -195,6 +213,14 @@ State persisted at `%APPDATA%\silver-wolf-pet\state.json`.
 MIT License. See [LICENSE](./LICENSE).
 
 The original code is released under MIT. **The character IP belongs to miHoYo / HoYoverse** — the MIT license grants no rights over the underlying character IP.
+
+### Third-Party Notices
+
+This project bundles a range of third-party components (npm dependencies, ASR engine, SenseVoice model weights, etc.) under their original licenses (MIT / BSD-2-Clause / Apache-2.0 / FunASR Model License).
+
+**See the full list and license terms at** [docs/THIRD_PARTY_LICENSES.md](./docs/THIRD_PARTY_LICENSES.md).
+
+In particular: the voice input feature uses the **FunAudioLLM/SenseVoice-Small** model under the [FunASR Model License](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE) (a non-OSI license that does permit commercial use and redistribution). Download the model weights separately per [docs/voice-input-spec.md §8.1](./docs/voice-input-spec.md).
 
 ---
 

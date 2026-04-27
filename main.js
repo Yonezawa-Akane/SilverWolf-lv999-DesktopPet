@@ -4,6 +4,21 @@ const fs = require('fs')
 const os = require('os')
 const { execSync, exec } = require('child_process')
 
+// -- Voice PTT optional native modules --
+// `uiohook-napi` provides keydown/keyup events for hold-to-talk; Electron's globalShortcut
+// is single-fire only and can't model "released". If the native module fails to load
+// (rare; usually missing VC++ Build Tools at install time on Windows), fall back to a
+// toggle mode using globalShortcut so the feature degrades rather than disappears.
+let uIOhook = null
+let UiohookKey = null
+try {
+  const m = require('uiohook-napi')
+  uIOhook = m.uIOhook
+  UiohookKey = m.UiohookKey
+} catch (e) {
+  console.warn('[voice] uiohook-napi 加载失败，PTT 降级为 toggle 模式:', e.message)
+}
+
 // -- Single-instance lock --
 // Without this, double-clicking the .exe (or the desktop shortcut) again spawns a fresh
 // Silver Wolf each time — the screen ends up filled with sprites and every window competes
@@ -24,6 +39,7 @@ const POMODORO_W = 240, POMODORO_H = 180
 let helperWin = null
 let pomodoroWin = null
 let _quickInsightShortcut = null
+let _respawnShortcut = null
 let launcherPosFile = null
 let launcherPosSaveTimer = null
 
@@ -152,7 +168,13 @@ const DEFAULT_STATE = {
     proactive_greeting_hours: 8,    // <= 0 disables; otherwise sidebar greets if last_active older than this
     quick_insight_shortcut: 'CommandOrControl+Shift+\\',  // global hotkey for screenshot helper
     respawn_pet_shortcut: 'CommandOrControl+Alt+W',       // global hotkey to respawn sprite (fullscreen-game alt-tab can demote z-order or hide the always-on-top window)
-    ui_scale: 1.0                   // webContents.setZoomFactor applied to every window; 0.9 / 1.0 / 1.15 / 1.3 from settings
+    ui_scale: 1.0,                  // webContents.setZoomFactor applied to every window; 0.9 / 1.0 / 1.15 / 1.3 from settings
+    voice_input_shortcut: 'CommandOrControl+Alt+V',       // PTT hotkey (uiohook 监听 keydown/keyup; 降级 globalShortcut 走 toggle). 之前默认是 Alt+Space 但和 Claude Desktop 全局召唤撞了，改 V (= Voice 助记)。
+    voice_input_mode: 'toggle',                           // 'toggle' (按一次开/再按一次停 — 用 globalShortcut, 极稳) | 'hold' (按住说话 — 用 uiohook, 部分 Windows 上钩子会被 OS 摘掉导致卡死，opt-in)
+    voice_input_enabled: true,                            // 模型缺失/初始化失败时启动期自动置 false
+    voice_input_language: 'auto',                         // 'auto' | 'zh' | 'en' | 'yue' | 'ja' | 'ko' (目前 services/voice.js 强制 auto)
+    voice_input_min_duration_ms: 300,                     // 短于这个阈值的录音直接丢弃（误触防护）
+    voice_input_max_duration_ms: 30000                    // 录音上限：sidebar 端到上限会自动 stop
   },
   learned_apps: {},
   routines: {},
@@ -194,11 +216,17 @@ function loadState() {
 function saveStateDebounced() {
   if (_saveTimer) clearTimeout(_saveTimer)
   _saveTimer = setTimeout(() => {
-    try {
-      fs.writeFileSync(stateFile(), JSON.stringify(_state, null, 2), 'utf8')
-    } catch (e) {
-      console.error('[state] save failed:', e.message)
-    }
+    // Async write so we don't block the main JS thread for the 50–200ms it takes
+    // to flush a large state.json (conversation + bubble_log + archived_conversations
+    // + facts can pile up). The hold-mode PTT path was getting stuck because this
+    // synchronous write fired ~500ms into a hold and during that block libuiohook's
+    // WH_KEYBOARD_LL hook overran its ~300ms LowLevelHooksTimeout and Windows
+    // silently unhooked us — keyup events stopped reaching Node and recording
+    // hung forever. (Quit-time write in `before-quit` stays sync — app must finish
+    // flushing before Electron tears down the BrowserWindows.)
+    fs.writeFile(stateFile(), JSON.stringify(_state, null, 2), 'utf8', (e) => {
+      if (e) console.error('[state] save failed:', e.message)
+    })
   }, 500)
 }
 
@@ -390,6 +418,584 @@ function runPsScript(scriptText, argsArray = [], opts = {}) {
   }
 }
 
+// -- Voice PTT (push-to-talk) --
+// Hold-to-talk via uiohook-napi (keydown=record, keyup=transcribe). Falls back to a
+// globalShortcut toggle when uiohook isn't available (degrades gracefully on machines
+// where the native module fails to compile).
+const voice = require('./services/voice')
+
+let _pttPressed = false
+let _pttUiohookStarted = false           // uIOhook.start() succeeded at least once (sticky)
+let _pttUiohookListenersInstalled = false // listeners attached (one-time guard, sticky)
+let _pttToggleAccel = null
+let _pttToggleActive = false             // toggle-mode latch
+let _pttMaxDurationTimer = null
+// Module-level so it persists across globalShortcut.unregister/register cycles —
+// putting it in the closure would lose the timestamp every time the user re-binds
+// the shortcut, defeating the auto-repeat suppression on the next press.
+let _lastTogglePressTime = 0
+// Timestamp of the most recent uiohook event of any kind. Used by the silence
+// watchdog to detect "hook went dark while we think PTT is held" and force-release.
+let _lastUiohookEventTime = 0
+
+function _voiceMaxDurationMs() {
+  return (_state && _state.preferences && _state.preferences.voice_input_max_duration_ms) || 30000
+}
+
+// -- Accelerator parsing --
+// Electron uses strings like 'CommandOrControl+Alt+V'. uiohook needs us to
+// match against (keycode, ctrlKey, altKey, shiftKey, metaKey) on each event.
+// Parse once and remember the result so the keydown/keyup handlers don't
+// have to split strings 60+ times a second.
+//
+// _pttUiohookSpec is null when:
+//   - uiohook isn't available
+//   - the configured accelerator can't be parsed (unknown key name)
+// In those cases the keydown/keyup handlers no-op, and the toggle fallback
+// (registered via globalShortcut) handles PTT instead.
+let _pttUiohookSpec = null
+
+const _ACCEL_KEY_ALIASES = {
+  '`': 'Backquote', '~': 'Backquote',
+  '-': 'Minus', '=': 'Equal',
+  '[': 'BracketLeft', ']': 'BracketRight',
+  '\\': 'Backslash',
+  ';': 'Semicolon', "'": 'Quote',
+  ',': 'Comma', '.': 'Period', '/': 'Slash',
+  'SPACE': 'Space',
+  'BACKSPACE': 'Backspace',
+  'TAB': 'Tab',
+  'ENTER': 'Enter', 'RETURN': 'Enter',
+  'ESC': 'Escape', 'ESCAPE': 'Escape',
+  'UP': 'ArrowUp', 'DOWN': 'ArrowDown',
+  'LEFT': 'ArrowLeft', 'RIGHT': 'ArrowRight',
+  'PAGEUP': 'PageUp', 'PAGEDOWN': 'PageDown',
+  'HOME': 'Home', 'END': 'End',
+  'INS': 'Insert', 'INSERT': 'Insert',
+  'DEL': 'Delete', 'DELETE': 'Delete',
+  'PLUS': 'Equal',  // Electron lets users write 'Plus'; UiohookKey doesn't
+}
+
+function parseAccelForUiohook(accel) {
+  if (!accel || !UiohookKey) return null
+  const parts = String(accel).split('+').map(s => s.trim()).filter(Boolean)
+  let needCtrl = false, needAlt = false, needShift = false, needMeta = false
+  let keyName = null
+  for (const p of parts) {
+    const lo = p.toLowerCase()
+    if (lo === 'commandorcontrol' || lo === 'cmdorctrl' || lo === 'control' || lo === 'ctrl') needCtrl = true
+    else if (lo === 'alt' || lo === 'altgr' || lo === 'option') needAlt = true
+    else if (lo === 'shift') needShift = true
+    else if (lo === 'cmd' || lo === 'command' || lo === 'super' || lo === 'meta') needMeta = true
+    else keyName = p
+  }
+  if (!keyName) return null
+  // Try direct lookup, then alias normalization
+  let lookup = _ACCEL_KEY_ALIASES[keyName] || _ACCEL_KEY_ALIASES[keyName.toUpperCase()] || keyName
+  // For single A-Z / 0-9, UiohookKey uses uppercase property names.
+  if (/^[a-z0-9]$/i.test(lookup)) lookup = lookup.toUpperCase()
+  const keycode = UiohookKey[lookup]
+  if (typeof keycode !== 'number') {
+    console.warn('[voice] 无法解析快捷键键位:', accel, '→', lookup)
+    return null
+  }
+  return { keycode, needCtrl, needAlt, needShift, needMeta, accel }
+}
+
+function _refreshPttUiohookSpec() {
+  const accel = _state && _state.preferences && _state.preferences.voice_input_shortcut
+  _pttUiohookSpec = parseAccelForUiohook(accel)
+  if (_pttUiohookSpec) {
+    console.log('[voice] PTT (hold mode) 热键已生效:', _pttUiohookSpec.accel,
+      '— uiohook keycode =', _pttUiohookSpec.keycode,
+      '(modifiers: ctrl=' + _pttUiohookSpec.needCtrl,
+      'alt=' + _pttUiohookSpec.needAlt,
+      'shift=' + _pttUiohookSpec.needShift,
+      'meta=' + _pttUiohookSpec.needMeta + ')')
+  } else {
+    console.warn('[voice] PTT 热键解析失败:', accel)
+  }
+}
+
+// Tracks whether *any* keyup happened since the last successful onPttDown.
+// Used to distinguish OS auto-repeat keydowns (no keyup in between) from a
+// genuine second press of the combo (a keyup did happen). When the user
+// re-presses the combo while we still think it's held, that's our cue that
+// libuiohook lost the previous keyup — treat the second press as release.
+let _pttHadKeyUpSinceDown = false
+
+function onPttDown() {
+  if (!voice.isReady()) {
+    showCharBubble('模型还没准备好。', { source: 'voice', mood: 'alert', duration: 1800 })
+    return
+  }
+  // ⚠️ DO NOT show the sidebar here. First-time sidebar load blocks the main JS
+  // thread for 0.5–2s while Electron parses sidebar.html (~91KB) and bootstraps
+  // contextBridge. During that block, libuiohook's WH_KEYBOARD_LL callback
+  // overruns its ~300ms deadline and Windows silently unhooks us — after which
+  // NO keyup events ever reach Node again, and PTT gets stuck in pressed state
+  // forever. The character bubble alone is enough indication that recording
+  // started; sidebar is revealed via 'sidebar:reveal' IPC AFTER transcription
+  // returns, which is well past the dangerous hook-deadline window.
+
+  showCharBubble('🎙️ 听着呢...', {
+    source: 'voice',
+    mood: 'processing',
+    duration: _voiceMaxDurationMs()
+  })
+  if (alive(launchWin)) launchWin.webContents.send('voice-active', true)
+  if (alive(sideWin))   sideWin.webContents.send('voice:start')
+  console.log('[voice] PTT pressed → mic start sent')
+
+  // Hard cap on recording length: if the user holds forever (or a stuck-keydown event
+  // misses its keyup), force-stop after the configured max so we don't leak mic state.
+  if (_pttMaxDurationTimer) clearTimeout(_pttMaxDurationTimer)
+  _pttMaxDurationTimer = setTimeout(() => {
+    if (_pttPressed || _pttToggleActive) {
+      _pttPressed = false
+      _pttToggleActive = false
+      onPttUp()
+    }
+  }, _voiceMaxDurationMs())
+}
+
+function onPttUp() {
+  if (_pttMaxDurationTimer) { clearTimeout(_pttMaxDurationTimer); _pttMaxDurationTimer = null }
+  if (alive(launchWin)) launchWin.webContents.send('voice-active', false)
+  if (alive(sideWin))   sideWin.webContents.send('voice:stop')
+  console.log('[voice] PTT released → mic stop sent, transcribing...')
+  // Overwrite the long-duration "听着呢..." bubble immediately so the user sees the
+  // mic actually closed. character.html's showBubble has no external hide — it just
+  // counts down `ms`, so the only way to dismiss is to push a fresh quip. Sidebar
+  // will overwrite this again with the success/empty/error result.
+  // 3s covers ~95th percentile of transcription + IPC roundtrip (typical 200ms,
+  // long recordings up to 2s). If sidebar's success/empty/error setQuip lands
+  // before 3s it overwrites this anyway, so the user never sees a mid-transition gap.
+  showCharBubble('💭 解析中...', { source: 'voice', mood: 'processing', duration: 3000 })
+}
+
+// Install uiohook event listeners exactly once for the app lifetime. uIOhook has
+// no off() — listeners stack on every .on() call — so calling this twice would
+// double-fire each callback. Listeners read module globals (_pttUiohookSpec,
+// _state.preferences.voice_input_mode) on every event and no-op when:
+//  - mode !== 'hold'                      (toggle mode is active instead)
+//  - _pttUiohookSpec === null             (paused for hotkey-capture, or unparseable accel)
+// Mode switches just flip those flags — listeners stay attached forever.
+function _installUiohookListenersOnce() {
+  if (_pttUiohookListenersInstalled) return
+  if (!uIOhook || !UiohookKey) return
+  _pttUiohookListenersInstalled = true
+
+  const VOICE_DEBUG = () => process.env.VOICE_DEBUG === '1' || (_state && _state.preferences && _state.preferences.voice_debug === true)
+
+  // Single guard helper — all handlers no-op when not in hold mode or spec is null.
+  const _holdActive = () =>
+    _pttUiohookSpec &&
+    _state && _state.preferences && _state.preferences.voice_input_mode === 'hold'
+
+  uIOhook.on('keydown', (e) => {
+    // Unconditional diagnostic log: lets us tell from a normal stdout dump whether
+    // libuiohook is delivering events at all when hold mode looks stuck. Cheap
+    // (~1µs per event); leave on by default.
+    console.log('[voice] uiohook keydown kc=', e.keycode)
+    _lastUiohookEventTime = Date.now()
+    if (VOICE_DEBUG()) console.log('[voice debug] keydown kc=', e.keycode, 'ctrl=', e.ctrlKey, 'alt=', e.altKey, 'shift=', e.shiftKey, 'meta=', e.metaKey, 'pressed=', _pttPressed)
+    if (!_holdActive()) return
+
+    const spec = _pttUiohookSpec
+    const matches =
+      e.keycode === spec.keycode &&
+      (!spec.needCtrl  || e.ctrlKey) &&
+      (!spec.needAlt   || e.altKey) &&
+      (!spec.needShift || e.shiftKey) &&
+      (!spec.needMeta  || e.metaKey)
+    if (!matches) return
+
+    if (_pttPressed) {
+      // Already held. Distinguish OS auto-repeat (no keyup since onPttDown) from
+      // genuine second press (a keyup happened — uiohook lost the *real* keyup).
+      if (_pttHadKeyUpSinceDown) {
+        console.warn('[voice] PTT re-press detected while still held — forcing release (workaround for missed keyup)')
+        _pttPressed = false
+        onPttUp()
+      }
+      return
+    }
+
+    _pttPressed = true
+    _pttHadKeyUpSinceDown = false
+    onPttDown()
+  })
+
+  uIOhook.on('keyup', (e) => {
+    // Unconditional diagnostic log — see keydown comment above.
+    console.log('[voice] uiohook keyup kc=', e.keycode)
+    _lastUiohookEventTime = Date.now()
+    if (VOICE_DEBUG()) console.log('[voice debug] keyup   kc=', e.keycode, 'ctrl=', e.ctrlKey, 'alt=', e.altKey, 'shift=', e.shiftKey, 'meta=', e.metaKey, 'pressed=', _pttPressed)
+
+    _pttHadKeyUpSinceDown = true
+
+    if (!_pttPressed) return
+    if (!_holdActive()) { _pttPressed = false; onPttUp(); return }
+
+    const spec = _pttUiohookSpec
+    const releasingMain  = e.keycode === spec.keycode
+    const releasingCtrl  = spec.needCtrl  && !e.ctrlKey
+    const releasingAlt   = spec.needAlt   && !e.altKey
+    const releasingShift = spec.needShift && !e.shiftKey
+    const releasingMeta  = spec.needMeta  && !e.metaKey
+    if (releasingMain || releasingCtrl || releasingAlt || releasingShift || releasingMeta) {
+      if (VOICE_DEBUG()) console.log('[voice debug] keyup matched: main=', releasingMain, 'ctrl=', releasingCtrl, 'alt=', releasingAlt, 'shift=', releasingShift, 'meta=', releasingMeta)
+      _pttPressed = false
+      onPttUp()
+      return
+    }
+    if (e.keycode === UiohookKey.Escape) {
+      _pttPressed = false
+      onPttUp()
+    }
+  })
+
+  // Mouse-event modifier watchdog. Per BUG-2 fix, we deliberately do NOT also attach
+  // watchdog to keydown — the keydown handler already inspects spec/modifiers, the
+  // inline watchdog was a duplicate dispatch path. Mouse events also feed the silence
+  // watchdog timestamp so we can tell if the *whole* hook (not just keys) went dark.
+  const _watchdogWithTime = (e) => {
+    _lastUiohookEventTime = Date.now()
+    _pttModifierWatchdog(e)
+  }
+  uIOhook.on('mousemove', _watchdogWithTime)
+  uIOhook.on('mousedown', _watchdogWithTime)
+  uIOhook.on('mouseup',   _watchdogWithTime)
+  uIOhook.on('wheel',     _watchdogWithTime)
+
+  // Silence watchdog (review v2 §6 D2). If we think PTT is held but no uiohook
+  // event has fired in 3 seconds, libuiohook's WH_KEYBOARD_LL hook was almost
+  // certainly silently unhooked by Windows (LowLevelHooksTimeout, antivirus,
+  // IME, RDP session change, fullscreen game). Force release so the user
+  // doesn't sit in a stuck state until the 30s max-duration fires.
+  setInterval(() => {
+    if (!_pttPressed) return
+    const since = Date.now() - _lastUiohookEventTime
+    if (since > 3000) {
+      console.warn('[voice] uiohook 静默', since, 'ms while pressed — 安全释放 (hook likely unhooked by OS)')
+      _pttPressed = false
+      onPttUp()
+    }
+  }, 1000)
+
+  console.log('[voice] uiohook listeners 已安装 (one-time, lifetime-attached) + silence watchdog 启用')
+}
+
+// Lazy uIOhook.start() — first time hold mode is engaged. Once started, never stopped
+// until app quit (libuiohook holds a global Win32 hook; restarting it costs more than
+// keeping it idle). Mode switches don't toggle this.
+function _startUiohookOnce() {
+  if (_pttUiohookStarted) return true
+  if (!uIOhook) return false
+  try {
+    uIOhook.start()
+    _pttUiohookStarted = true
+    console.log('[voice] uiohook 已启动 (lazy start, hold mode 首次进入)')
+    return true
+  } catch (e) {
+    console.error('[voice] uIOhook.start 失败:', e.message)
+    return false
+  }
+}
+
+// Modifier-state watchdog. Shared by keydown / mousemove / mousedown / mouseup /
+// wheel paths. libuiohook on Windows occasionally drops keyup events under CPU
+// pressure / focus changes / fullscreen alt-tab; every event carries LIVE modifier
+// flags, so we can detect "modifier was released, we missed the keyup" on the
+// next interaction.
+function _pttModifierWatchdog(e) {
+  if (!_pttPressed) return
+  const spec = _pttUiohookSpec
+  if (!spec) return
+  const ctrlOk  = !spec.needCtrl  || e.ctrlKey
+  const altOk   = !spec.needAlt   || e.altKey
+  const shiftOk = !spec.needShift || e.shiftKey
+  const metaOk  = !spec.needMeta  || e.metaKey
+  if (!(ctrlOk && altOk && shiftOk && metaOk)) {
+    _pttPressed = false
+    onPttUp()
+  }
+}
+
+function registerVoicePTT() {
+  if (!_state || !_state.preferences || !_state.preferences.voice_input_enabled) return
+
+  // Listeners are installed *once* at startup (see app.whenReady). registerVoicePTT
+  // is the dispatcher that flips between modes by:
+  //  - hold:   refresh _pttUiohookSpec → lazy uIOhook.start() if not yet running
+  //  - toggle: clear _pttUiohookSpec (handlers no-op) → register globalShortcut
+  const mode = (_state.preferences.voice_input_mode === 'hold') ? 'hold' : 'toggle'
+  if (mode === 'toggle') {
+    _pttUiohookSpec = null
+    _registerVoicePTTToggle()
+    return
+  }
+
+  // Hold mode.
+  if (!uIOhook || !UiohookKey) {
+    console.warn('[voice] 用户请求 hold 模式，但 uiohook-napi 不可用，回退 toggle')
+    _registerVoicePTTToggle()
+    return
+  }
+  _refreshPttUiohookSpec()
+  if (!_pttUiohookSpec) {
+    console.warn('[voice] hold 模式启用，但当前热键无法解析为 uiohook keycode；回退 toggle')
+    _registerVoicePTTToggle()
+    return
+  }
+  if (!_startUiohookOnce()) {
+    console.warn('[voice] uiohook 启动失败，回退 toggle 模式')
+    _pttUiohookSpec = null
+    _registerVoicePTTToggle()
+    return
+  }
+  console.log('[voice] PTT (hold mode) 已生效:', _pttUiohookSpec.accel)
+}
+
+function _registerVoicePTTToggle() {
+  const accel = (_state.preferences && _state.preferences.voice_input_shortcut) || 'CommandOrControl+Alt+V'
+  // Unregister any previous toggle binding before re-registering (no-op on first call).
+  if (_pttToggleAccel && _pttToggleAccel !== accel) {
+    try { globalShortcut.unregister(_pttToggleAccel) } catch {}
+  }
+  _pttToggleAccel = accel
+  try {
+    const ok = globalShortcut.register(accel, () => {
+      // Auto-repeat suppression. Holding the hotkey down causes Windows to fire
+      // this callback every ~33ms via WM_HOTKEY repeat — without debouncing, a
+      // 3s hold rapidly toggles _pttToggleActive 90 times and fires onPttDown/Up
+      // pairs in a flurry. 300ms is well above OS auto-repeat (~33ms) and well
+      // below any real "user pressed twice on purpose" cadence.
+      const now = Date.now()
+      if (now - _lastTogglePressTime < 300) return
+      _lastTogglePressTime = now
+
+      _pttToggleActive = !_pttToggleActive
+      console.log('[voice] PTT toggle pressed → active=', _pttToggleActive)
+      if (_pttToggleActive) onPttDown()
+      else onPttUp()
+    })
+    if (ok) console.log('[voice] PTT (toggle) 注册成功:', accel)
+    else    console.error('[voice] PTT toggle 注册失败 (热键被占用?):', accel)
+    return ok
+  } catch (e) {
+    console.error('[voice] PTT toggle 注册异常:', e.message)
+    return false
+  }
+}
+
+// -- Runtime hotkey reconfig --
+// Settings UI calls this via IPC when the user changes any of the three managed
+// shortcuts. Returns { ok, error? } so the renderer can show an inline warning
+// when the OS rejects the new combo (typically: another app already grabbed it).
+function _reregisterShortcut(kind, accel) {
+  if (!accel || typeof accel !== 'string') return { ok: false, error: 'invalid_accel' }
+  if (!_state || !_state.preferences) return { ok: false, error: 'state_missing' }
+
+  if (kind === 'voice') {
+    _state.preferences.voice_input_shortcut = accel
+    // Mode is decided by user preference, NOT by whether uiohook ever started.
+    // (_pttUiohookStarted is sticky-true once started and never resets, so using
+    // it would route hold-mode logic to a user who switched back to toggle.)
+    const isHold = _state.preferences.voice_input_mode === 'hold'
+    if (isHold && uIOhook && UiohookKey) {
+      // Hold mode: listeners are permanently attached at startup and read
+      // _pttUiohookSpec on every event, so just refresh the spec.
+      _refreshPttUiohookSpec()
+      if (!_pttUiohookSpec) return { ok: false, error: 'unparseable_key' }
+      return { ok: true, mode: 'hold' }
+    }
+    // Toggle path: re-register the globalShortcut with the new accel.
+    const ok = _registerVoicePTTToggle()
+    return { ok: !!ok, mode: 'toggle', error: ok ? undefined : 'register_failed' }
+  }
+
+  if (kind === 'screenshot') {
+    if (_quickInsightShortcut) { try { globalShortcut.unregister(_quickInsightShortcut) } catch {} }
+    try {
+      const ok = globalShortcut.register(accel, triggerQuickInsight)
+      if (!ok) return { ok: false, error: 'register_failed' }
+      _quickInsightShortcut = accel
+      _state.preferences.quick_insight_shortcut = accel
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  }
+
+  if (kind === 'respawn') {
+    if (_respawnShortcut) { try { globalShortcut.unregister(_respawnShortcut) } catch {} }
+    try {
+      const ok = globalShortcut.register(accel, respawnPet)
+      if (!ok) return { ok: false, error: 'register_failed' }
+      _respawnShortcut = accel
+      _state.preferences.respawn_pet_shortcut = accel
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  }
+
+  return { ok: false, error: 'unknown_kind' }
+}
+
+ipcMain.handle('shortcuts:get', () => {
+  if (!_state || !_state.preferences) return null
+  const configuredMode = _state.preferences.voice_input_mode === 'hold' ? 'hold' : 'toggle'
+  return {
+    voice:      _state.preferences.voice_input_shortcut      || 'CommandOrControl+Alt+V',
+    screenshot: _state.preferences.quick_insight_shortcut    || 'CommandOrControl+Shift+\\',
+    respawn:    _state.preferences.respawn_pet_shortcut      || 'CommandOrControl+Alt+W',
+    voice_mode: configuredMode,
+    // Effective mode is what's actually running. If hold was requested but uiohook
+    // couldn't start, we silently fell back to toggle. Settings UI uses this to
+    // show a warning.
+    voice_mode_effective: (configuredMode === 'hold' && uIOhook && _pttUiohookStarted) ? 'hold' : 'toggle',
+    uiohook_available: !!(uIOhook && UiohookKey)
+  }
+})
+
+// Switch between hold-to-talk and toggle modes at runtime. Unregisters whatever
+// was active and registers the new mode.
+ipcMain.handle('voice:set-mode', (_e, mode) => {
+  console.log('[voice] set-mode requested:', mode)
+  if (mode !== 'hold' && mode !== 'toggle') return { ok: false, error: 'invalid_mode' }
+  if (!_state || !_state.preferences) return { ok: false, error: 'state_missing' }
+
+  // If a recording is currently active, route through onPttUp() first so the
+  // sidebar tears down its capture (mic + AudioContext) — otherwise voiceCapturing
+  // stays true in renderer, and the next startVoiceCapture short-circuits forever.
+  if (_pttPressed || _pttToggleActive) {
+    console.log('[voice] mode switch interrupting active recording — running onPttUp first')
+    _pttPressed = false
+    _pttToggleActive = false
+    onPttUp()
+  }
+
+  // Tear down whatever's currently registered.
+  if (_pttToggleAccel) { try { globalShortcut.unregister(_pttToggleAccel) } catch {} ; _pttToggleAccel = null }
+  // Hold path: listeners stay attached at module level (BUG-2 fix); spec=null → no-op.
+  _pttUiohookSpec = null
+
+  _state.preferences.voice_input_mode = mode
+  registerVoicePTT()
+  saveStateDebounced()
+  const effective = (mode === 'hold' && uIOhook && _pttUiohookStarted && _pttUiohookSpec) ? 'hold' : 'toggle'
+  console.log('[voice] set-mode result: requested=', mode, 'effective=', effective)
+  return { ok: true, mode, effective }
+})
+
+ipcMain.handle('shortcuts:set', (_e, payload) => {
+  const kind = payload && payload.kind
+  const accel = payload && payload.accel
+  const result = _reregisterShortcut(kind, accel)
+  if (result.ok) saveStateDebounced()
+  return result
+})
+
+// -- Capture mode: temporarily disable globalShortcut handlers + uiohook PTT matching --
+// On Windows, globalShortcut.register() consumes the keypress at the OS level, so any
+// combo we've registered (screenshot / respawn / PTT-toggle) never reaches the renderer.
+// While the settings UI is recording a new hotkey we need the renderer to see EVERY key
+// the user presses, so we unregister everything we own, then re-register from state on
+// resume (which by then may include the just-saved new accelerator).
+let _shortcutsPaused = false
+
+// Force OS-level keyboard focus onto the sidebar. Renderer-side `window.focus()` is
+// JS-only and doesn't move the Windows foreground/active window — required when entering
+// hotkey-record mode on an always-on-top floating window that the user clicked into via
+// a non-focusable <span>.
+ipcMain.handle('sidebar:focus', () => {
+  if (!alive(sideWin)) return { ok: false, error: 'sidebar_not_alive' }
+  try {
+    if (!sideWin.isVisible()) sideWin.show()
+    sideWin.focus()
+    sideWin.moveTop()
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+})
+
+ipcMain.handle('shortcuts:pause-capture', () => {
+  if (_shortcutsPaused) return { ok: true }
+  _shortcutsPaused = true
+  if (_quickInsightShortcut) { try { globalShortcut.unregister(_quickInsightShortcut) } catch {} }
+  if (_respawnShortcut)      { try { globalShortcut.unregister(_respawnShortcut)      } catch {} }
+  // PTT in toggle mode goes through globalShortcut (eats keys at OS level), so
+  // unregister so the renderer can capture the user's new combo. Hold mode uses
+  // uiohook (observer only, doesn't eat keys), so we leave the binding alone and
+  // just null the spec so handlers no-op.
+  // The mode is decided by user preference, NOT by _pttUiohookStarted (sticky-true).
+  const isHold = (_state && _state.preferences && _state.preferences.voice_input_mode === 'hold')
+  if (_pttToggleAccel && !isHold) {
+    try { globalShortcut.unregister(_pttToggleAccel) } catch {}
+  }
+  _pttUiohookSpec = null
+  return { ok: true }
+})
+
+ipcMain.handle('shortcuts:resume-capture', () => {
+  if (!_shortcutsPaused) return { ok: true }
+  _shortcutsPaused = false
+
+  const prefs = (_state && _state.preferences) || {}
+  const sc = prefs.quick_insight_shortcut
+  if (sc && !globalShortcut.isRegistered(sc)) {
+    try {
+      if (globalShortcut.register(sc, triggerQuickInsight)) _quickInsightShortcut = sc
+    } catch {}
+  }
+  const rs = prefs.respawn_pet_shortcut
+  if (rs && !globalShortcut.isRegistered(rs)) {
+    try {
+      if (globalShortcut.register(rs, respawnPet)) _respawnShortcut = rs
+    } catch {}
+  }
+  // PTT: hold mode just refreshes the spec; toggle mode re-registers the
+  // globalShortcut with whatever (possibly newly-changed) accel is in prefs.
+  // Decided by user preference, NOT by _pttUiohookStarted.
+  const isHold = prefs.voice_input_mode === 'hold'
+  if (isHold) {
+    _refreshPttUiohookSpec()
+  } else if (prefs.voice_input_shortcut && !globalShortcut.isRegistered(prefs.voice_input_shortcut)) {
+    _registerVoicePTTToggle()
+  }
+  return { ok: true }
+})
+
+ipcMain.handle('voice:transcribe', async (_e, payload) => {
+  const t0 = Date.now()
+  const sampleCount = payload && payload.samples ? payload.samples.length : 0
+  console.log('[voice] transcribe called: samples=', sampleCount)
+  if (!voice.isReady()) {
+    console.warn('[voice] transcribe: model_not_ready')
+    return { ok: false, error: 'model_not_ready' }
+  }
+  try {
+    const samples = payload && payload.samples
+    const sampleRate = (payload && payload.sampleRate) || 16000
+    if (!samples || !samples.length) {
+      console.warn('[voice] transcribe: empty_samples')
+      return { ok: false, error: 'empty_samples' }
+    }
+    const f32 = (samples instanceof Float32Array) ? samples : Float32Array.from(samples)
+    const text = voice.transcribe(f32, sampleRate)
+    const ms = Date.now() - t0
+    console.log('[voice] transcribe done in', ms, 'ms →', JSON.stringify((text || '').slice(0, 40)))
+    return { ok: true, text }
+  } catch (e) {
+    console.error('[voice] transcribe failed:', e)
+    return { ok: false, error: e.message || String(e) }
+  }
+})
+
 function createWindows() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
   const SW = 240
@@ -413,6 +1019,28 @@ function createWindows() {
   })
   sideWin.loadFile('renderer/sidebar.html')
   sideWin.setAlwaysOnTop(true, 'floating')
+
+  // Pre-warm sidebar window allocation. Without this, the FIRST sideWin.show()
+  // (which happens after the user's first PTT) blocks the main JS thread for
+  // 1-2s while Windows allocates the window surface + GPU compositor + Chromium
+  // sets up the renderer. During that block, libuiohook's WH_KEYBOARD_LL hook
+  // overruns its ~300ms deadline, Windows silently unhooks us, and PTT stops
+  // working entirely (the very "second press doesn't trigger" symptom).
+  //
+  // Doing show/hide here — RIGHT after loadFile, BEFORE the sideWin.on('show')
+  // listener that broadcasts sidebar-state to the launcher is wired up — means
+  // the launcher icon doesn't get a stale "sidebar opened" signal. Off-screen
+  // position guarantees no flash.
+  try {
+    const origBounds = sideWin.getBounds()
+    sideWin.setPosition(-32000, -32000)
+    sideWin.showInactive()
+    sideWin.hide()
+    sideWin.setPosition(origBounds.x, origBounds.y)
+    console.log('[sidebar] prewarm complete (window surface allocated)')
+  } catch (e) {
+    console.warn('[sidebar] prewarm failed:', e.message)
+  }
 
   charWin = new BrowserWindow({
     width: CHAR_WIN_W, height: CHAR_WIN_H,
@@ -505,6 +1133,7 @@ app.whenReady().then(() => {
 
   // Respawn-pet hotkey — recovers sprite from fullscreen-game alt-tab z-order demotion.
   const respawnAccel = (_state && _state.preferences && _state.preferences.respawn_pet_shortcut) || 'CommandOrControl+Alt+W'
+  _respawnShortcut = respawnAccel
   try {
     const ok = globalShortcut.register(respawnAccel, respawnPet)
     if (!ok) console.error('[shortcut] respawn 注册失败：可能被其他应用占用', respawnAccel)
@@ -512,6 +1141,36 @@ app.whenReady().then(() => {
   } catch (e) {
     console.error('[shortcut] respawn 注册异常', e.message)
   }
+
+  // -- Voice PTT --
+  // Defer model load by 800ms so the windows finish painting first; sherpa-onnx-node
+  // pulls a ~234MB ONNX into memory and freezes the JS thread for ~1-2s.
+  setTimeout(() => {
+    const ok = voice.initRecognizer()
+    if (!ok) {
+      if (_state.preferences) _state.preferences.voice_input_enabled = false
+      const present = voice.isModelPresent()
+      const text = present
+        ? '语音引擎初始化失败，PTT 暂时不能用。'
+        : '语音模型没塞进来，PTT 暂时不能用～(看 docs/voice-input-spec.md)'
+      showCharBubble(text, { source: 'voice', mood: 'alert', duration: 4500 })
+      return
+    }
+    // Init succeeded — unconditionally re-enable. A previous session may have
+    // persisted voice_input_enabled=false because the model was missing; once
+    // the model is back, PTT must come back on without requiring the user to
+    // hand-edit state.json (BUG-3).
+    if (_state.preferences) {
+      _state.preferences.voice_input_enabled = true
+      saveStateDebounced()
+    }
+    // Install uiohook listeners *once*, before any registerVoicePTT() call.
+    // Listeners are attached to closures over module globals; mode switches
+    // just flip _pttUiohookSpec / voice_input_mode and the handlers no-op
+    // outside hold mode. uIOhook.start() is still lazy (hold-mode entry).
+    _installUiohookListenersOnce()
+    registerVoicePTT()
+  }, 800)
 
   // Resume pomodoro across restart. If the elapsed time has already eaten the entire
   // work+break cycle, mark the session done silently — no point firing a stale notif.
@@ -547,6 +1206,10 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   app.isQuitting = true
   globalShortcut.unregisterAll()
+  if (uIOhook && _pttUiohookStarted) {
+    try { uIOhook.stop() } catch {}
+    _pttUiohookStarted = false
+  }
   // Archive current conversation to long-term storage with timestamp + retention purge.
   // Then flush state.json synchronously before windows die.
   try { archiveAndPurge(_state) } catch (e) { console.error('[archive] failed:', e.message) }
@@ -1002,6 +1665,30 @@ ipcMain.on('close', () => app.quit())
 ipcMain.on('toggle-sidebar', () => {
   if (!alive(sideWin)) return
   sideWin.isVisible() ? sideWin.hide() : sideWin.show()
+})
+
+// Voice flow uses this AFTER transcription returns: the renderer asks main to
+// reveal the sidebar so the user can see the synthesized message land in chat.
+// We deliberately don't reveal in onPttDown because first-time sidebar load
+// blocks long enough to make libuiohook lose its hook on Windows. By the time
+// transcription has returned, that danger window is past.
+ipcMain.on('sidebar:reveal', () => {
+  if (!alive(sideWin)) return
+  if (!sideWin.isVisible()) {
+    try { sideWin.showInactive() } catch {}
+  }
+})
+
+// Emergency unstick: if uiohook drops the keyup events somehow and the user
+// is stuck with a "🎙️ 听着呢..." bubble, they can call this to forcibly reset.
+// Bound to bubble-click + a "强制结束录音" button in settings.
+ipcMain.on('voice:force-stop', () => {
+  console.log('[voice] force-stop fired (pressed=', _pttPressed, 'toggleActive=', _pttToggleActive, ')')
+  if (!_pttPressed && !_pttToggleActive) return
+  console.warn('[voice] force-stop: unsticking PTT state')
+  _pttPressed = false
+  _pttToggleActive = false
+  onPttUp()
 })
 ipcMain.on('char-move', (e, { x, y }) => {
   if (!alive(charWin)) return
