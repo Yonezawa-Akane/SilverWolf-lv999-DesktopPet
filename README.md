@@ -103,6 +103,14 @@ MIT 许可证。详见 [LICENSE](./LICENSE)。
 
 代码原作以 MIT 协议开源。**角色 IP 版权归米哈游所有**，MIT 协议不授予角色相关的任何 IP 权利。
 
+### 第三方组件声明
+
+本项目集成了多个第三方组件（npm 依赖、ASR 引擎、SenseVoice 语音模型权重等），各自保留原始协议（MIT / BSD-2-Clause / Apache-2.0 / FunASR Model License）。
+
+**完整清单与各协议条款见** [docs/THIRD_PARTY_LICENSES.md](./docs/THIRD_PARTY_LICENSES.md)。
+
+特别说明：语音输入功能使用 **FunAudioLLM/SenseVoice-Small** 模型，该模型采用 [FunASR Model License](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE)（非标准 OSI 协议，但允许商用与再分发）。模型权重文件请按 [docs/voice-input-spec.md §8.1](./docs/voice-input-spec.md) 单独下载。
+
 ---
 
 ## 🇬🇧 English Documentation
@@ -195,6 +203,14 @@ State persisted at `%APPDATA%\silver-wolf-pet\state.json`.
 MIT License. See [LICENSE](./LICENSE).
 
 The original code is released under MIT. **The character IP belongs to miHoYo / HoYoverse** — the MIT license grants no rights over the underlying character IP.
+
+### Third-Party Notices
+
+This project bundles a range of third-party components (npm dependencies, ASR engine, SenseVoice model weights, etc.) under their original licenses (MIT / BSD-2-Clause / Apache-2.0 / FunASR Model License).
+
+**See the full list and license terms at** [docs/THIRD_PARTY_LICENSES.md](./docs/THIRD_PARTY_LICENSES.md).
+
+In particular: the voice input feature uses the **FunAudioLLM/SenseVoice-Small** model under the [FunASR Model License](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE) (a non-OSI license that does permit commercial use and redistribution). Download the model weights separately per [docs/voice-input-spec.md §8.1](./docs/voice-input-spec.md).
 
 ---
 
