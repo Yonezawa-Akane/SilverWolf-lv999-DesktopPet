@@ -16,7 +16,7 @@
 
 ### 给用户（90% 读者）
 
-**不用装 Node 或 Git**。从 Releases 页面下载最新的 `SilverWolfPet-vX.X.X-win-x64.zip`，按 3 步走：
+**不用装 Node 或 Git**。从 Releases 页面下载最新的 `SilverWolfPet-vX.X.X.zip`，按 3 步走：
 
 1. **解压** zip 到 `D:\SilverWolfPet\`（⚠ 不要放 `C:\Program Files`）
 2. 双击 **① 配置环境.bat** —— 自动装语音功能依赖的 VC++ 运行库，约 30 秒，**仅首次**
