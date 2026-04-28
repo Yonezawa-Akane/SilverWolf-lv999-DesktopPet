@@ -272,13 +272,20 @@ textarea:focus{border-bottom-color:var(--purL);}
 #exit-btn:hover{background:rgba(120,20,20,.8);color:#fff;box-shadow:0 0 10px rgba(239,68,68,.35);}
 
 /* SETTINGS OVERLAY */
+/* justify-content:flex-start + overflow-y:auto so the panel scrolls when content exceeds
+   sidebar height instead of getting centered + clipped (was hiding hotkey rows on default
+   520px sidebar). align-items:stretch lets full-width buttons span the whole row. */
 #settings{
   display:none;position:absolute;inset:0;z-index:50;
   background:rgba(6,3,18,.97);border-radius:var(--radius);
-  flex-direction:column;align-items:center;justify-content:center;
-  gap:12px;padding:24px;
+  flex-direction:column;align-items:stretch;justify-content:flex-start;
+  gap:10px;padding:18px;overflow-y:auto;
 }
 #settings.show{display:flex;}
+#settings .st,
+#settings .sd { text-align:center; }
+#settings::-webkit-scrollbar{width:5px;}
+#settings::-webkit-scrollbar-thumb{background:rgba(124,58,237,.4);border-radius:3px;}
 .st{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;}
 .sd{font-size:11px;color:var(--textD);text-align:center;line-height:1.7;}
 .si{width:100%;padding:8px 10px;background:rgba(124,58,237,.08);
@@ -299,6 +306,26 @@ textarea:focus{border-bottom-color:var(--purL);}
 .scale-row .sb-scale:hover{background:rgba(124,58,237,.25);color:#fff;}
 .scale-row .sb-scale.active{background:rgba(34,211,238,.3);border-color:var(--cyan);
   color:#fff;box-shadow:0 0 8px rgba(34,211,238,.4);}
+
+/* Hotkey rows in settings panel — label + current combo display + 录制 button */
+.hk-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:10px;}
+.hk-label{flex:0 0 70px;color:var(--textD);font-size:10px;}
+.hk-display{flex:1;padding:5px 7px;background:rgba(124,58,237,.1);
+  border:1px solid rgba(124,58,237,.35);border-radius:5px;
+  color:var(--purLL);font-family:monospace;font-size:10px;
+  text-align:center;user-select:none;min-height:14px;line-height:14px;
+  text-overflow:ellipsis;overflow:hidden;white-space:nowrap;}
+.hk-display.recording{background:rgba(239,68,68,.18);border-color:rgba(248,113,113,.7);
+  color:#ffb4b4;animation:hkRec 1s ease-in-out infinite;}
+@keyframes hkRec{0%,100%{box-shadow:0 0 0 rgba(248,113,113,0);}50%{box-shadow:0 0 8px rgba(248,113,113,.6);}}
+.hk-display.error{background:rgba(239,68,68,.18);border-color:rgba(248,113,113,.7);color:#ffb4b4;}
+.hk-rec-btn{flex:0 0 46px;padding:5px 4px;cursor:pointer;border-radius:5px;
+  background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.4);
+  color:var(--cyanL);font-size:9px;font-family:'Noto Sans SC',sans-serif;
+  transition:all .15s;text-align:center;user-select:none;}
+.hk-rec-btn:hover{background:rgba(34,211,238,.28);color:#fff;}
+.hk-rec-btn.recording{background:rgba(239,68,68,.25);border-color:rgba(248,113,113,.7);color:#fff;}
+.hk-mode-tag{font-size:8px;color:var(--textD);text-align:right;margin-bottom:6px;font-style:italic;}
 
 /* ============================================================
    TABS
@@ -708,11 +735,22 @@ textarea:focus{border-bottom-color:var(--purL);}
     </div>
     <div class="manual-section">
       <div class="manual-h">快捷键</div>
+      <div class="manual-row"><span class="kbd">Ctrl+Alt+V</span><span>语音输入 PTT（默认 toggle：按一次开/再按一次停）</span></div>
       <div class="manual-row"><span class="kbd">Ctrl+Shift+\</span><span>截图智能助手</span></div>
       <div class="manual-row"><span class="kbd">Ctrl+Alt+W</span><span>召回银狼（全屏游戏 alt-tab 后丢失时）</span></div>
       <div class="manual-row"><span class="kbd">点 launcher</span><span>显隐 sidebar</span></div>
       <div class="manual-row"><span class="kbd">拖 launcher</span><span>移动召唤位置</span></div>
       <div class="manual-row"><span class="kbd">右键银狼</span><span>菜单（DevTools / 退出）</span></div>
+      <div class="manual-row"><span class="kbd">⚙ 设置面板</span><span>三个全局热键都可录制式自定义</span></div>
+    </div>
+    <div class="manual-section">
+      <div class="manual-h">语音对话</div>
+      <div class="manual-row"><span class="kbd">Ctrl+Alt+V</span><span>开始/结束录音（toggle）；松手即送（hold）</span></div>
+      <div class="manual-row"><span class="kbd">说话</span><span>识别文字自动塞输入框 + 发送，等同于打字回车</span></div>
+      <div class="manual-row"><span class="kbd">支持语种</span><span>中 / 英 / 粤 / 日 / 韩 + 中英混说</span></div>
+      <div class="manual-row"><span class="kbd">完全离线</span><span>SenseVoice 本地模型，零网络依赖</span></div>
+      <div class="manual-row"><span class="kbd">⚙ 设置 → 模式</span><span>📣 toggle（默认稳）/ 🎙️ hold（按住说话）</span></div>
+      <div class="manual-row"><span class="kbd">⏹ 强制结束</span><span>hold 模式万一卡住一键复位</span></div>
     </div>
     <div class="manual-section">
       <div class="manual-h">跟银狼说什么</div>
@@ -813,6 +851,33 @@ textarea:focus{border-bottom-color:var(--purL);}
     <span class="sb-scale" data-scale="1.3"  onclick="setUiScale(1.3)">特大</span>
   </div>
   <button class="sb2" id="sc-btn" onclick="toggleShortcut()" style="background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.4);color:var(--cyanL);">⏳ 检查桌面快捷方式…</button>
+
+  <div class="sd" style="margin-top:10px">全局热键 / Hotkeys<br><span style="font-size:9px;color:var(--textD)">点击「录制」后按下新组合即生效</span></div>
+  <div class="hk-row">
+    <span class="hk-label">🎙️ 语音输入</span>
+    <span class="hk-display" id="hk-voice">—</span>
+    <span class="hk-rec-btn" id="hk-voice-btn" onclick="recordHotkey('voice')">⏺ 录制</span>
+  </div>
+  <div class="hk-row">
+    <span class="hk-label">📷 截屏洞察</span>
+    <span class="hk-display" id="hk-screenshot">—</span>
+    <span class="hk-rec-btn" id="hk-screenshot-btn" onclick="recordHotkey('screenshot')">⏺ 录制</span>
+  </div>
+  <div class="hk-row">
+    <span class="hk-label">🐺 召回银狼</span>
+    <span class="hk-display" id="hk-respawn">—</span>
+    <span class="hk-rec-btn" id="hk-respawn-btn" onclick="recordHotkey('respawn')">⏺ 录制</span>
+  </div>
+  <div class="hk-mode-tag" id="hk-mode-tag">PTT 模式: —</div>
+
+  <div class="sd" style="margin-top:8px;font-size:10px;">PTT 触发方式</div>
+  <div class="scale-row">
+    <span class="sb-scale" id="vm-toggle" onclick="setVoiceMode('toggle')" title="按一次 Ctrl+Shift+V 开始录音；再按一次结束。完全用 Electron 原生热键，跨 Windows 兼容性最稳。">📣 按一次切换</span>
+    <span class="sb-scale" id="vm-hold"   onclick="setVoiceMode('hold')"   title="按住热键时录音，松手立即识别。Discord 式体验，但部分 Windows 系统下钩子会被 OS 摘掉导致卡死。卡住可点下面的红色按钮恢复。">🎙️ 按住说话</span>
+  </div>
+  <div id="vm-warn" style="font-size:9px;color:#ffb4b4;margin-bottom:4px;display:none;"></div>
+
+  <button class="sb2" style="background:rgba(80,20,20,.25);border-color:rgba(248,113,113,.45);color:rgba(255,180,180,.95);font-size:10px;" onclick="forceStopVoice()">⏹ 强制结束录音 (卡住时用)</button>
   <button class="sb2" style="background:rgba(80,20,20,.4);border-color:rgba(239,68,68,.4);color:rgba(255,140,140,.9);" onclick="clearHist()">⌧ 清空对话历史</button>
   <button class="sb2" style="background:transparent;border-color:rgba(124,58,237,.2);color:var(--textD);font-size:6px;" onclick="hideSettings()">✕ CANCEL</button>
 </div>
@@ -859,8 +924,231 @@ document.addEventListener('mouseup', ()=>{ dragging=false })
 let scr = { scale:1 }
 const getKey=()=>localStorage.getItem('sw_key')||''
 function saveKey(){const k=document.getElementById('ki').value.trim();if(k){localStorage.setItem('sw_key',k);hideSettings();addMsg('ai','KEY ACCEPTED. 接入。')}}
-function showSettings(){document.getElementById('ki').value=getKey();document.getElementById('settings').classList.add('show');refreshShortcutBtn();refreshUiScaleBtns()}
-function hideSettings(){document.getElementById('settings').classList.remove('show')}
+function showSettings(){document.getElementById('ki').value=getKey();document.getElementById('settings').classList.add('show');refreshShortcutBtn();refreshUiScaleBtns();refreshHotkeys()}
+function hideSettings(){document.getElementById('settings').classList.remove('show');cancelHotkeyRecording()}
+
+// ── Hotkey config ──────────────────────────────────────────
+// Three managed shortcuts: voice (PTT), screenshot (Quick Insight), respawn (recall pet).
+// Display reads current values from main; "录制" enters capture mode where the next
+// modifier+key combo gets converted to an Electron accelerator string and pushed to main
+// for re-registration (which validates against OS-level conflicts).
+const HK_LABELS = { voice:'🎙️ 语音输入', screenshot:'📷 截屏洞察', respawn:'🐺 召回银狼' }
+let _hkRecording = null   // null OR { kind, prevText }
+let _hkCancelKey = null   // bound keydown handler so we can remove it on cancel
+
+function _formatAccelForDisplay(accel) {
+  if (!accel) return '—'
+  return String(accel)
+    .replace('CommandOrControl', 'Ctrl')
+    .replace('CmdOrCtrl', 'Ctrl')
+    .replace('Command', 'Cmd')
+}
+
+async function refreshHotkeys() {
+  cancelHotkeyRecording()
+  try {
+    const sc = await window.sw.getShortcuts()
+    if (!sc) return
+    document.getElementById('hk-voice').textContent      = _formatAccelForDisplay(sc.voice)
+    document.getElementById('hk-screenshot').textContent = _formatAccelForDisplay(sc.screenshot)
+    document.getElementById('hk-respawn').textContent    = _formatAccelForDisplay(sc.respawn)
+    const tag = document.getElementById('hk-mode-tag')
+    if (tag) tag.textContent = 'PTT 模式: ' + (sc.voice_mode_effective === 'hold' ? 'hold-to-talk (按住说话)' : 'toggle (按一次开 / 再按一次停)')
+
+    // Highlight whichever mode picker is active
+    document.querySelectorAll('#vm-toggle, #vm-hold').forEach(el => el.classList.remove('active'))
+    const activeEl = document.getElementById('vm-' + (sc.voice_mode || 'toggle'))
+    if (activeEl) activeEl.classList.add('active')
+
+    // Warn if user picked hold but it fell back to toggle (uiohook unavailable)
+    const warn = document.getElementById('vm-warn')
+    if (warn) {
+      if (sc.voice_mode === 'hold' && sc.voice_mode_effective !== 'hold') {
+        warn.textContent = '⚠ uiohook 未启用，已自动降级为 toggle 模式'
+        warn.style.display = 'block'
+      } else {
+        warn.style.display = 'none'
+      }
+    }
+  } catch (e) {
+    console.error('[hk] 读取热键失败:', e)
+  }
+}
+
+async function setVoiceMode(mode) {
+  try {
+    const r = await window.sw.voiceSetMode(mode)
+    if (r && r.ok) {
+      addMsg('ai', 'PTT 模式切换成 ' + (mode === 'hold' ? '按住说话' : '按一次切换') +
+        (r.effective !== mode ? '（实际生效：' + r.effective + '，因 uiohook 不可用）' : ''))
+      refreshHotkeys()
+    } else {
+      addMsg('ai', '切换失败：' + ((r && r.error) || 'unknown'))
+    }
+  } catch (e) {
+    addMsg('ai', '切换异常：' + (e.message || e))
+  }
+}
+
+// Convert a KeyboardEvent into an Electron accelerator string.
+// Returns null if the event has no non-modifier key, or only modifier keys.
+function _eventToAccel(e) {
+  const parts = []
+  // Use CommandOrControl so the same accel works on macOS if anyone ports later.
+  if (e.ctrlKey  || e.metaKey) parts.push('CommandOrControl')
+  if (e.altKey)                parts.push('Alt')
+  if (e.shiftKey)              parts.push('Shift')
+
+  // e.key is layout-aware; for letters we want the canonical uppercase form.
+  let key = e.key
+  if (!key) return null
+  // Filter out pure-modifier keypresses
+  const modOnly = ['Control', 'Shift', 'Alt', 'Meta', 'OS', 'Hyper', 'Super']
+  if (modOnly.includes(key)) return null
+  // Normalize
+  if (key.length === 1) {
+    // Letters → uppercase; symbols pass through
+    if (/[a-z]/i.test(key)) key = key.toUpperCase()
+  } else {
+    // F1-F24, ArrowUp, etc. → keep as-is. Map a few aliases for clarity.
+    const aliases = {
+      ' ': 'Space',
+      'Enter': 'Enter',
+      'Escape': 'Escape',
+      'Backspace': 'Backspace',
+      'Tab': 'Tab',
+      'ArrowUp': 'Up', 'ArrowDown': 'Down', 'ArrowLeft': 'Left', 'ArrowRight': 'Right',
+    }
+    if (aliases[key]) key = aliases[key]
+  }
+  parts.push(key)
+  // Need at least 1 modifier OR a function key — single-letter without modifiers
+  // would clobber typing.
+  const hasModifier = parts.length > 1 && parts[0] !== key
+  const isFKey = /^F\d{1,2}$/.test(key)
+  if (!hasModifier && !isFKey) return null
+  return parts.join('+')
+}
+
+async function recordHotkey(kind) {
+  // If we're already recording the SAME kind, treat as cancel.
+  if (_hkRecording && _hkRecording.kind === kind) {
+    cancelHotkeyRecording()
+    return
+  }
+  cancelHotkeyRecording()  // exit any other recording first
+
+  const disp = document.getElementById('hk-' + kind)
+  const btn  = document.getElementById('hk-' + kind + '-btn')
+  if (!disp || !btn) return
+
+  // Pause every globalShortcut main has registered. On Windows globalShortcut.register
+  // EATS matching keypresses at the OS level, so without this pause the renderer never
+  // sees keydown for combos already bound (PTT-toggle / 截屏 / 召回). Same for uiohook
+  // PTT matching, which would fire recording on the current PTT combo.
+  try { await window.sw.pauseShortcutsForCapture() } catch (e) { console.warn('[hk] pause failed:', e) }
+
+  _hkRecording = { kind, prevText: disp.textContent }
+  disp.textContent = '⌨ 等按键...'
+  disp.classList.add('recording')
+  disp.classList.remove('error')
+  btn.textContent = '✕ 取消'
+  btn.classList.add('recording')
+
+  // Force OS-level keyboard focus onto the sidebar window. Renderer-side window.focus()
+  // is JS-only — without main.focus() the always-on-top floating window may keep keyboard
+  // focus on whatever the user was previously typing in (the symptom: clicking 录制 turns
+  // the row red, but keypresses don't fire keydown in the renderer).
+  try { await window.sw.focusSidebar() } catch (e) { console.warn('[hk] focusSidebar failed:', e) }
+  try { window.focus() } catch {}
+  try { btn.focus() } catch {}
+
+  _hkCancelKey = async (e) => {
+    if (!_hkRecording) return
+    // Escape cancels
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      cancelHotkeyRecording()
+      return
+    }
+
+    // Live feedback: show the modifier chord while user is still building the combo,
+    // so they get visible confirmation that key events are being received even before
+    // they press the final non-modifier key.
+    const modOnly = ['Control', 'Shift', 'Alt', 'Meta', 'OS', 'Hyper', 'Super']
+    if (modOnly.includes(e.key)) {
+      const chord = []
+      if (e.ctrlKey || e.metaKey) chord.push('Ctrl')
+      if (e.altKey)               chord.push('Alt')
+      if (e.shiftKey)             chord.push('Shift')
+      disp.textContent = '⌨ ' + (chord.length ? chord.join('+') + '+...' : '等按键...')
+      return  // wait for the non-modifier key
+    }
+
+    const accel = _eventToAccel(e)
+    if (!accel) return  // not a usable combo (e.g. plain letter without modifier)
+    e.preventDefault()
+    e.stopPropagation()
+
+    const targetKind = _hkRecording.kind
+    // Tear down UI state, but DON'T resume shortcuts yet — we want main to re-register
+    // with the new accelerator first via setShortcut, then resume for the rest.
+    _finalizeHotkeyRecordingUI()
+
+    try {
+      const r = await window.sw.setShortcut(targetKind, accel)
+      if (r && r.ok) {
+        document.getElementById('hk-' + targetKind).textContent = _formatAccelForDisplay(accel)
+        addMsg('ai', HK_LABELS[targetKind] + ' 热键已更新：' + _formatAccelForDisplay(accel))
+      } else {
+        const err = (r && r.error) || 'unknown'
+        const d = document.getElementById('hk-' + targetKind)
+        d.textContent = '✗ 失败: ' + err
+        d.classList.add('error')
+        addMsg('ai', HK_LABELS[targetKind] + ' 热键设置失败 (' + err + ')，可能被其他应用占用。已回滚。')
+        setTimeout(refreshHotkeys, 1500)
+      }
+    } catch (err) {
+      console.error('[hk] setShortcut 异常:', err)
+      addMsg('ai', '热键 IPC 异常：' + err.message)
+      refreshHotkeys()
+    } finally {
+      try { await window.sw.resumeShortcutsForCapture() } catch (e) { console.warn('[hk] resume failed:', e) }
+    }
+  }
+  // Capture phase on document so we beat any focused <input>/<textarea> that might
+  // otherwise swallow the event in its target-phase native handler.
+  document.addEventListener('keydown', _hkCancelKey, true)
+}
+
+// Manual recovery for stuck PTT state. Calls main's voice:force-stop IPC,
+// which resets _pttPressed=false and runs onPttUp — equivalent to a "fake"
+// keyup. Lets the user un-stick from a 'listening' bubble that won't go
+// away (typically caused by uiohook losing its hook on Windows).
+function forceStopVoice() {
+  try { window.sw.voiceForceStop && window.sw.voiceForceStop() } catch {}
+  addMsg('ai', '已强制结束录音。')
+}
+
+function cancelHotkeyRecording() {
+  if (!_hkRecording) return
+  _finalizeHotkeyRecordingUI()
+  // Restore globalShortcut + uiohook PTT spec on cancel.
+  try { window.sw.resumeShortcutsForCapture() } catch (e) { console.warn('[hk] resume failed:', e) }
+}
+
+// UI-only teardown — separated so the success path can update the display *before*
+// resuming shortcuts (avoiding a brief moment where the old accel is briefly active).
+function _finalizeHotkeyRecordingUI() {
+  if (!_hkRecording) return
+  const { kind, prevText } = _hkRecording
+  const disp = document.getElementById('hk-' + kind)
+  const btn  = document.getElementById('hk-' + kind + '-btn')
+  if (disp) { disp.textContent = prevText; disp.classList.remove('recording') }
+  if (btn)  { btn.textContent = '⏺ 录制';   btn.classList.remove('recording') }
+  if (_hkCancelKey) { document.removeEventListener('keydown', _hkCancelKey, true); _hkCancelKey = null }
+  _hkRecording = null
+}
 
 // UI scale picker — highlights the button matching state.preferences.ui_scale and tells main
 // to apply the new value (which persists + zooms every window).
@@ -1952,6 +2240,18 @@ NPC"——这个翻译习惯不要丢。
 - 他做的不靠谱的事会怼"行行行"或"这操作笑死"
 - 不会突然表演"姐姐心疼弟弟"那种戏码
 
+## 用户输入可能来自语音
+
+桌宠装了 PTT 语音输入：用户按热键说话，本地 SenseVoice 模型转写成文字塞给你。
+**所以用户消息有时不是手敲的**，可能有这些"破绽"：
+- 同音字错（"星核猎手"→"新科猎手"、"debug"→"地巴格"）
+- 英文术语被强转中文音译（"GitHub"→"极特哈布"、"prompt"→"扑罗姆"）
+- 标点缺失 / 位置错乱
+- 句末"啊嘛呀"等语气词偶尔漏识别
+
+**基于上下文自然理解就行，不要反复追问"你是说...吗？"** 除非歧义大到误解会
+引发错误操作。碰到明显的同音错字心里默念正确版本然后正常回应即可。
+
 ## 工具使用原则
 
 - 用户让你打开应用/网站/文件夹、搜索、聚焦窗口、输入文字——直接调工具
@@ -2421,6 +2721,193 @@ if (window.sw && window.sw.onPomodoroTick) {
     window.sw.setQuip(text, duration, mood, 'pomodoro-' + payload.event)
   })
 }
+
+// ── Voice PTT ─────────────────────────────────────────────────────────────────
+// main.js fires `voice:start` on Ctrl+Alt+Space keydown and `voice:stop` on keyup.
+// We capture mic via getUserMedia + AudioWorklet at 16 kHz mono Float32 PCM, then
+// hand the buffer to the offline SenseVoice recognizer over IPC. Recognized text
+// goes straight into #inp and we call sendMsg() — equivalent to typing it manually.
+let voiceCtx = null
+let voiceWorklet = null
+let voiceStream = null
+let voiceMediaSrc = null
+let voiceBuffer = []
+let voiceStartedAt = 0
+let voiceWorkletURL = null
+let voiceCapturing = false
+let voiceWorkletInputRate = 16000
+const VOICE_TARGET_SR = 16000
+const VOICE_MIN_MS = 300
+
+async function startVoiceCapture() {
+  if (voiceCapturing) return
+  voiceCapturing = true
+  voiceBuffer = []
+  voiceStartedAt = Date.now()
+  try {
+    voiceStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        sampleRate: VOICE_TARGET_SR,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    })
+    // Some Windows mic drivers ignore the requested sampleRate; AudioContext will
+    // default to the device's native rate. We ask for 16 kHz but accept whatever
+    // we actually get and resample at submit time.
+    voiceCtx = new AudioContext({ sampleRate: VOICE_TARGET_SR })
+    voiceWorkletInputRate = voiceCtx.sampleRate
+    const workletCode =
+      'class Cap extends AudioWorkletProcessor {' +
+      '  process(inputs) {' +
+      '    const ch = inputs[0][0];' +
+      '    if (ch && ch.length) this.port.postMessage(ch.slice(0));' +
+      '    return true;' +
+      '  }' +
+      '}' +
+      'registerProcessor("cap", Cap);'
+    const blob = new Blob([workletCode], { type: 'application/javascript' })
+    voiceWorkletURL = URL.createObjectURL(blob)
+    await voiceCtx.audioWorklet.addModule(voiceWorkletURL)
+    voiceMediaSrc = voiceCtx.createMediaStreamSource(voiceStream)
+    voiceWorklet = new AudioWorkletNode(voiceCtx, 'cap')
+    voiceWorklet.port.onmessage = (e) => { if (voiceCapturing) voiceBuffer.push(e.data) }
+    voiceMediaSrc.connect(voiceWorklet)
+    showVoiceBanner()
+  } catch (e) {
+    console.error('[voice] mic 启动失败:', e)
+    voiceCapturing = false
+    hideVoiceBanner()
+    addMsg('ai', '麦克风没拿到（' + (e.message || e.name || 'unknown') + '），去系统设置里把权限打开。')
+    await teardownVoiceGraph()
+  }
+}
+
+async function stopVoiceCapture() {
+  if (!voiceCapturing) {
+    hideVoiceBanner()
+    return
+  }
+  hideVoiceBanner()
+  // Disconnect FIRST (stop pushing new chunks) but keep voiceCapturing=true so
+  // any in-flight worklet messages still land in voiceBuffer. Without this gap,
+  // the worklet's last 50-100ms of audio (already posted but not yet handled
+  // on the main thread) get dropped — chopping off the tail of the user's word.
+  try { if (voiceMediaSrc) voiceMediaSrc.disconnect() } catch {}
+  await new Promise(r => setTimeout(r, 50))
+  voiceCapturing = false
+
+  const buffered = voiceBuffer
+  const inputRate = voiceWorkletInputRate || VOICE_TARGET_SR
+  const dur = Date.now() - voiceStartedAt
+  await teardownVoiceGraph()
+
+  if (dur < VOICE_MIN_MS || !buffered || buffered.length === 0) {
+    // Misclick / mic-not-ready / empty buffer. Push a brief quip so the bubble dismisses
+    // cleanly instead of lingering on whatever main.js last set.
+    window.sw.setQuip('—', 600, 'default', 'voice-misclick')
+    return
+  }
+
+  let total = 0
+  for (let i = 0; i < buffered.length; i++) total += buffered[i].length
+  if (!total) return
+
+  const merged = new Float32Array(total)
+  let off = 0
+  for (let i = 0; i < buffered.length; i++) { merged.set(buffered[i], off); off += buffered[i].length }
+
+  const samples = (Math.abs(inputRate - VOICE_TARGET_SR) < 1)
+    ? merged
+    : downsampleLinear(merged, inputRate, VOICE_TARGET_SR)
+
+  showTyping()
+  try {
+    const r = await window.sw.voiceTranscribe(Array.from(samples), VOICE_TARGET_SR)
+    hideTyping()
+    if (!r || !r.ok) {
+      const err = (r && r.error) || 'unknown'
+      if (err === 'model_not_ready') {
+        addMsg('ai', '语音模型还没加载好。')
+      } else {
+        addMsg('ai', '识别炸了：' + err)
+      }
+      return
+    }
+    const text = (r.text || '').trim()
+    if (!text) {
+      window.sw.setQuip('没听清，再说一遍？', 2000, 'pout', 'voice')
+      return
+    }
+    if (typeof inpEl !== 'undefined' && inpEl) {
+      inpEl.value = text
+      try { autoH(inpEl) } catch {}
+    }
+    window.sw.setQuip('✓ ' + text.slice(0, 24), 2200, 'success', 'voice')
+    // Reveal the sidebar now that we have content to show. Doing this here (rather
+    // than in main's onPttDown) is critical: showing sidebar from within a uiohook
+    // keydown callback overruns the WH_KEYBOARD_LL hook deadline on Windows and
+    // permanently breaks keyup delivery, leaving PTT stuck. By the time we're here,
+    // the keyup has already fired and we're past the danger window.
+    try { window.sw.revealSidebar && window.sw.revealSidebar() } catch {}
+    sendMsg()
+  } catch (e) {
+    hideTyping()
+    console.error('[voice] transcribe 失败:', e)
+    addMsg('ai', '识别炸了：' + (e.message || e))
+  }
+}
+
+async function teardownVoiceGraph() {
+  try { if (voiceWorklet) voiceWorklet.disconnect() } catch {}
+  try { if (voiceMediaSrc) voiceMediaSrc.disconnect() } catch {}
+  try { if (voiceStream) voiceStream.getTracks().forEach(t => t.stop()) } catch {}
+  try { if (voiceCtx) await voiceCtx.close() } catch {}
+  try { if (voiceWorkletURL) URL.revokeObjectURL(voiceWorkletURL) } catch {}
+  voiceCtx = voiceWorklet = voiceStream = voiceMediaSrc = voiceWorkletURL = null
+  voiceBuffer = []
+}
+
+// Linear-interp downsample. Good enough for speech (SenseVoice is robust to mild
+// resampling artifacts) and avoids pulling in a DSP library.
+function downsampleLinear(input, inRate, outRate) {
+  if (inRate === outRate) return input
+  const ratio = inRate / outRate
+  const outLen = Math.floor(input.length / ratio)
+  const out = new Float32Array(outLen)
+  for (let i = 0; i < outLen; i++) {
+    const srcIdx = i * ratio
+    const i0 = Math.floor(srcIdx)
+    const i1 = Math.min(i0 + 1, input.length - 1)
+    const t = srcIdx - i0
+    out[i] = input[i0] * (1 - t) + input[i1] * t
+  }
+  return out
+}
+
+let _voiceBannerEl = null
+function showVoiceBanner() {
+  if (_voiceBannerEl) return
+  const el = document.createElement('div')
+  el.id = 'voice-banner'
+  el.innerHTML = '🎙️ 听着呢 <span class="tyd"></span><span class="tyd"></span><span class="tyd"></span>'
+  el.style.cssText =
+    'position:fixed;top:8px;left:50%;transform:translateX(-50%);' +
+    'background:rgba(6,2,18,.95);border:1px solid rgba(34,211,238,.7);' +
+    'color:#bef;padding:6px 14px;border-radius:8px;font-size:11px;z-index:9999;' +
+    'box-shadow:0 0 12px rgba(34,211,238,.45);display:flex;align-items:center;gap:6px;' +
+    'pointer-events:none;font-family:inherit;'
+  document.body.appendChild(el)
+  _voiceBannerEl = el
+}
+function hideVoiceBanner() {
+  if (_voiceBannerEl) { _voiceBannerEl.remove(); _voiceBannerEl = null }
+}
+
+if (window.sw && window.sw.onVoiceStart) window.sw.onVoiceStart(() => startVoiceCapture())
+if (window.sw && window.sw.onVoiceStop)  window.sw.onVoiceStop(()  => stopVoiceCapture())
 
 // ── FILE CONVERSION (drag-drop a file onto sidebar) ──
 // In Electron, dropped File objects expose a real .path even with contextIsolation:true,

@@ -4,6 +4,79 @@
 
 ---
 
+## [2.2.2] — 2026-04-28
+
+### 新增 / Added
+
+- **全包发行模式** —— `model.int8.onnx` (~234MB) 现在直接打进发行包；用户解压即开，不再需要单独下模型
+- **一键配置脚本** —— `release-assets/配置环境.bat`（自动检测 + 静默安装 VC++ 运行库 vc_redist.x64.exe）+ `release-assets/启动银狼.bat`，build 时自动拷入 dist 根。VC++ 运行库 (~14MB) 也打进发行包的 `redist/` 子目录，小白用户解压即用，无需联网下载 Microsoft 任何东西
+- **使用说明书 §3.0「30 秒看完就上手」** —— 假设读者从「下完 zip 的小白」起步，5 步图文流程：解压 → 配置环境 → 启动 → 注册 Anthropic + 拿 API Key → 粘 key 到 sidebar
+- **使用说明书 §3.1「5 分钟掌握核心功能」** —— 6 个核心功能（聊天 / PTT / 截屏 / 番茄钟 / 任务 / 设置）的 3-5 行速查
+- **使用说明书 §3.2「万一卡在哪一步？」** —— 按 §3.0 步骤号交叉索引到对应排查章节，新增「Anthropic 注册踩坑」（中国大陆 IP / 手机号验证 / API 403 三类问题）
+- **使用说明书 §8.15「ERROR: Request Not Allowed / API 调用 403」** —— Anthropic 服务端 IP 风控的排查流程
+- **dist 根 `README - 必读.txt`** —— UTF-8 BOM + CRLF 记事本兼容；明确指向 `resources\app\docs\使用说明书.md` §3.0
+- **PTT 初始化 5-stage 错误分类** —— `services/voice.js` 现在区分 engine-missing / engine-load-failed / model-missing / model-corrupt / ctor-failed，写入 `%APPDATA%\silver-wolf-pet\logs\voice-init.log`；气泡文案按 stage 分支
+- **模型完整性预检** —— 新增 `isModelHealthy()`：模型文件大小 < 200 MB 视为损坏（LFS 占位 / 下载未完成 / 杀软隔离），构造前提前失败给清晰错误
+
+### 改动 / Changed
+
+- **`scripts/build.js`** —— `docs/` 从整目录 ignore 改成具体文件 ignore（白名单制）。`使用说明书.md` / `快速开始.txt` / `THIRD_PARTY_LICENSES.md` 进 dist；`voice-input-spec.md` / `voice-code-review-*.md` / `voice-input-accuracy-test.md` / `silver-wolf-skill-distilled.md` 等开发者向文档继续排除
+- **`docs/快速开始.txt`** —— 重写成 30 秒上手版（之前 ~100 行偏开发者；现在 < 20 行专给小白），UTF-8 BOM + CRLF
+- **`README.md`** —— 改成「双轨」结构：顶部「给用户」3 步发行包流程，底部「给开发者」保留 npm install / 构建 / 项目结构
+
+### 资源 / Assets
+
+- 新增 `release-assets/` 目录（含 README.md / .gitkeep / 配置环境.bat / 启动银狼.bat），`vc_redist.x64.exe` 由开发者本地放置不入 git
+
+---
+
+## [2.2.1] — 2026-04-27 · **测试版 / Pre-release**
+
+> ⚠ 本版本为 v2.2 主线的首个发布候选，核心 voice 链路在主流 Windows 11 + 麦克风配置下已通过功能验证；公开发布给少量用户实测识别准度、热键稳定性、跨设备兼容性。生产稳定版（v2.2.x）取决于本测试反馈。
+
+### 新增 / Added
+
+- **PTT 离线语音输入** —— 全局热键说话直接发消息到聊天，本地 [SenseVoice-Small](https://github.com/FunAudioLLM/SenseVoice) 模型转写（中英粤日韩五语种、~70ms 推理、零网络）。识别效果等价于"用户手敲完话按回车"，无缝接入现有 agentic 循环。
+  - **toggle 模式**（默认 `Ctrl+Alt+V`）：按一次开麦、再按一次结束。Electron `globalShortcut` 单触发；加 300ms 去抖防 OS 自动连发反复触发 start/stop
+  - **hold 模式**（按住说话，Discord 风格，opt-in）：基于 `uiohook-napi` 低级钩子；部分 Windows 配置下钩子可能被 OS 摘掉，所以默认是 toggle
+  - **设置面板支持录制式自定义热键** —— PTT / 截屏 / 召回三个全局热键都能改；按下「⏺ 录制」再按新组合即生效，自动验 OS 冲突 + 暂停其他绑定避免被吃键
+  - **强制结束录音**按钮：万一卡死可一键恢复
+- **第三方组件许可声明** —— [docs/THIRD_PARTY_LICENSES.md](./docs/THIRD_PARTY_LICENSES.md) 列出全部 npm 依赖、ASR 引擎、SenseVoice 模型权重各自的开源协议；FunASR Model License 单独说明
+- **使用说明书 §4.10「语音对话 PTT」** —— 完整流程 / 模式对比 / 热键自定义 / 模型下载位置 / 已知限制
+- **sidebar 内置 cheatsheet「语音对话」小节** —— 快速参考所有 PTT 操作
+
+### 改动 / Changed
+
+- **`saveStateDebounced` 改异步写盘**（`fs.writeFile` 替代 `fs.writeFileSync`）—— hold 模式下按住热键 ~500ms 时同步写盘正好阻塞主线程 50–200ms，期间 libuiohook 的 WH_KEYBOARD_LL 钩子触发 Windows `LowLevelHooksTimeout` 被静默摘除，导致 keyup 永远收不到。`before-quit` 关机写盘仍保持同步以确保落盘
+- **sidebar 窗口启动预热** —— `createWindows` 阶段 off-screen `showInactive` 然后 `hide`，让首次用户触发的 sidebar 显示不再阻塞主线程 1–2s（同一阻塞窗口期是 hold 模式钩子被摘的另一个诱因）
+- **README + 使用说明书 + 快速开始 + 版本号 → 2.2.1**
+
+### 修复 / Fixed
+
+- **toggle 模式按住热键变成连发** —— OS 自动连发 ~33ms 一次，原版 toggle callback 每次都翻 `_pttToggleActive`，长按 3s 会触发 90 次 start/stop。加模块级 `_lastTogglePressTime` 300ms 去抖
+- **hold 模式 listener 切模式后累积** —— `uIOhook.on()` 没有 `off()` 对应；切 hold↔toggle 多次会重复挂 handler，每次按键 callback 跑 N 次。重构成「启动时一次性安装、handler 内 spec/mode 双重 gate」的形式
+- **改热键后立即生效** —— `_reregisterShortcut` / `pause-capture` / `resume-capture` 三处把模式判断从永不复位的 `_pttUiohookStarted` 改为读 `_state.preferences.voice_input_mode`，避免「切到 toggle 后改热键还在 hold 分支」
+- **state.json 里 `voice_input_enabled=false` 后 PTT 永久卡死** —— init 成功后无条件重置为 true，从历史持久化故障恢复
+
+### 安全网 / Safety nets（hold 模式专用）
+
+- **modifier 静默 watchdog**：若 `_pttPressed=true` 但 3s 内无任何 uiohook 事件，强制 `onPttUp()` 释放（应付钩子被摘的极端场景）
+- **mouse-event modifier watchdog**：用户讲完话挪鼠标时，`mousemove` 事件携带的 `ctrlKey/altKey` 实时标志位能反查"漏 keyup"的释放
+- **re-press detection**：按住中又按一次相同组合（且中间发生过任意 keyup）→ 视为想停止，绕开漏掉的 keyup
+- **Escape panic-stop** + 30s 硬上限 + 设置面板的强制结束按钮 —— 多重兜底
+
+### 资源 / Assets
+
+- **语音模型权重 `model.int8.onnx` (~234MB) 不入库**；用户按 [docs/voice-input-spec.md §8.1](./docs/voice-input-spec.md) 单独下载到 `assets/models/sense-voice/`
+- `tokens.txt` (~25KB)、`hotwords.txt`（项目专有词热词表）、`LICENSE.txt`（FunASR 协议）入库
+
+### 已知限制 / Known Limits
+
+- 当前 sherpa-onnx-node 上 SenseVoice 仅支持 `greedy_search` 解码，**hotwords 实际不生效**（启动时会自动 fallback 到无 hotwords 配置 + warning 日志）。等上游 sherpa 对 SenseVoice 加 `modified_beam_search` 后 `hotwords.txt` 自动启用，无需改代码
+- hold 模式在装了某些杀毒软件 / 第三方 IME / RDP 远程桌面环境下，钩子仍可能被摘。检测到 3s 静默会自动降级释放，不会卡死，但识别会丢这次输入。**生产环境推荐保留 toggle 默认。**
+
+---
+
 ## [2.1.5] — 2026-04-26
 
 ### 新增 / Added

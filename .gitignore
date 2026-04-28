@@ -51,3 +51,20 @@ __pycache__/
 
 # ---------- Misc generated assets ----------
 assets/launcher_raw.png
+
+# ---------- Voice input model weights ----------
+# Model files are large (~234MB int8 / ~938MB fp32) and re-downloadable from
+# https://github.com/k2-fsa/sherpa-onnx/releases (asr-models tag).
+# Setup instructions: docs/voice-input-spec.md §8.1
+# tokens.txt and LICENSE.txt are kept in git so collaborators can verify
+# directory shape and license attribution.
+assets/models/sense-voice/*.onnx
+assets/models/sense-voice/*.bin
+assets/models/silero_vad.onnx
+
+# release-assets: vc_redist.x64.exe 太大，由开发者本地放置
+release-assets/vc_redist.x64.exe
+release-assets/*.exe
+
+# release: 发布 zip，体积太大不入 git
+release/
