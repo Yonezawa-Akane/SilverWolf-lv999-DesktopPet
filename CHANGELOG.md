@@ -4,6 +4,32 @@
 
 ---
 
+## [2.2.2] — 2026-04-28
+
+### 新增 / Added
+
+- **全包发行模式** —— `model.int8.onnx` (~234MB) 现在直接打进发行包；用户解压即开，不再需要单独下模型
+- **一键配置脚本** —— `release-assets/配置环境.bat`（自动检测 + 静默安装 VC++ 运行库 vc_redist.x64.exe）+ `release-assets/启动银狼.bat`，build 时自动拷入 dist 根。VC++ 运行库 (~14MB) 也打进发行包的 `redist/` 子目录，小白用户解压即用，无需联网下载 Microsoft 任何东西
+- **使用说明书 §3.0「30 秒看完就上手」** —— 假设读者从「下完 zip 的小白」起步，5 步图文流程：解压 → 配置环境 → 启动 → 注册 Anthropic + 拿 API Key → 粘 key 到 sidebar
+- **使用说明书 §3.1「5 分钟掌握核心功能」** —— 6 个核心功能（聊天 / PTT / 截屏 / 番茄钟 / 任务 / 设置）的 3-5 行速查
+- **使用说明书 §3.2「万一卡在哪一步？」** —— 按 §3.0 步骤号交叉索引到对应排查章节，新增「Anthropic 注册踩坑」（中国大陆 IP / 手机号验证 / API 403 三类问题）
+- **使用说明书 §8.15「ERROR: Request Not Allowed / API 调用 403」** —— Anthropic 服务端 IP 风控的排查流程
+- **dist 根 `README - 必读.txt`** —— UTF-8 BOM + CRLF 记事本兼容；明确指向 `resources\app\docs\使用说明书.md` §3.0
+- **PTT 初始化 5-stage 错误分类** —— `services/voice.js` 现在区分 engine-missing / engine-load-failed / model-missing / model-corrupt / ctor-failed，写入 `%APPDATA%\silver-wolf-pet\logs\voice-init.log`；气泡文案按 stage 分支
+- **模型完整性预检** —— 新增 `isModelHealthy()`：模型文件大小 < 200 MB 视为损坏（LFS 占位 / 下载未完成 / 杀软隔离），构造前提前失败给清晰错误
+
+### 改动 / Changed
+
+- **`scripts/build.js`** —— `docs/` 从整目录 ignore 改成具体文件 ignore（白名单制）。`使用说明书.md` / `快速开始.txt` / `THIRD_PARTY_LICENSES.md` 进 dist；`voice-input-spec.md` / `voice-code-review-*.md` / `voice-input-accuracy-test.md` / `silver-wolf-skill-distilled.md` 等开发者向文档继续排除
+- **`docs/快速开始.txt`** —— 重写成 30 秒上手版（之前 ~100 行偏开发者；现在 < 20 行专给小白），UTF-8 BOM + CRLF
+- **`README.md`** —— 改成「双轨」结构：顶部「给用户」3 步发行包流程，底部「给开发者」保留 npm install / 构建 / 项目结构
+
+### 资源 / Assets
+
+- 新增 `release-assets/` 目录（含 README.md / .gitkeep / 配置环境.bat / 启动银狼.bat），`vc_redist.x64.exe` 由开发者本地放置不入 git
+
+---
+
 ## [2.2.1] — 2026-04-27 · **测试版 / Pre-release**
 
 > ⚠ 本版本为 v2.2 主线的首个发布候选，核心 voice 链路在主流 Windows 11 + 麦克风配置下已通过功能验证；公开发布给少量用户实测识别准度、热键稳定性、跨设备兼容性。生产稳定版（v2.2.x）取决于本测试反馈。
