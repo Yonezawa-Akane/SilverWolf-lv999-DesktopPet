@@ -61,3 +61,10 @@ assets/launcher_raw.png
 assets/models/sense-voice/*.onnx
 assets/models/sense-voice/*.bin
 assets/models/silero_vad.onnx
+
+# release-assets: vc_redist.x64.exe 太大，由开发者本地放置
+release-assets/vc_redist.x64.exe
+release-assets/*.exe
+
+# release: 发布 zip，体积太大不入 git
+release/

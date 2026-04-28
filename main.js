@@ -424,6 +424,47 @@ function runPsScript(scriptText, argsArray = [], opts = {}) {
 // where the native module fails to compile).
 const voice = require('./services/voice')
 
+// Stage-specific bubble copy for init failure. Kept short because the bubble auto-
+// dismisses; the actionable detail lives in voice-init.log and 使用说明书 §8.14.
+function _voiceFailureBubbleText(stage) {
+  switch (stage) {
+    case 'engine-missing':     return '语音引擎没装上，重跑 npm install 试试 (看 voice-init.log)。'
+    case 'engine-load-failed': return '语音引擎加载失败，可能缺 VC++ 运行库 (看 voice-init.log)。'
+    case 'model-missing':      return '语音模型没塞进来，PTT 暂时不能用～(看 docs/voice-input-spec.md)'
+    case 'model-corrupt':      return '语音模型文件大小异常（可能没下完），重新下载一下 (看 voice-init.log)。'
+    case 'ctor-failed':        return '语音引擎初始化失败，PTT 暂时不能用 (看 voice-init.log)。'
+    default:                   return '语音引擎初始化失败，PTT 暂时不能用 (看 voice-init.log)。'
+  }
+}
+
+// Append a structured diagnostic block to <userData>/logs/voice-init.log so the user
+// (or whoever they forward it to) can tell at a glance whether init died at require,
+// model presence, model integrity, or constructor — each has a different remedy.
+// Lives in userData rather than the project dir because the packaged app's resources
+// are read-only on most install layouts.
+function _writeVoiceInitLog(detail, health) {
+  try {
+    const logDir = path.join(app.getPath('userData'), 'logs')
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true })
+    const logPath = path.join(logDir, 'voice-init.log')
+    const lines = [
+      '==== ' + new Date().toISOString() + ' ====',
+      'app version: ' + app.getVersion(),
+      'platform: ' + process.platform + ' / arch: ' + process.arch,
+      'electron: ' + process.versions.electron + ' / node: ' + process.versions.node + ' / v8: ' + process.versions.v8,
+      'stage: ' + detail.stage,
+      'message: ' + (detail.message || ''),
+      'hint: ' + (detail.hint || ''),
+      'model size: ' + health.sizeBytes + ' bytes (' + health.reason + ')',
+      '',
+    ]
+    fs.appendFileSync(logPath, lines.join('\n'), 'utf8')
+    console.log('[voice] init failure logged to', logPath)
+  } catch (e) {
+    console.error('[voice] failed to write voice-init.log:', e.message)
+  }
+}
+
 let _pttPressed = false
 let _pttUiohookStarted = false           // uIOhook.start() succeeded at least once (sticky)
 let _pttUiohookListenersInstalled = false // listeners attached (one-time guard, sticky)
@@ -1149,11 +1190,12 @@ app.whenReady().then(() => {
     const ok = voice.initRecognizer()
     if (!ok) {
       if (_state.preferences) _state.preferences.voice_input_enabled = false
-      const present = voice.isModelPresent()
-      const text = present
-        ? '语音引擎初始化失败，PTT 暂时不能用。'
-        : '语音模型没塞进来，PTT 暂时不能用～(看 docs/voice-input-spec.md)'
-      showCharBubble(text, { source: 'voice', mood: 'alert', duration: 4500 })
+      const detail = (voice.getLastErrorDetail && voice.getLastErrorDetail())
+        || { stage: 'unknown', message: voice.getLastError() || '(no detail)', hint: '' }
+      const health = voice.modelHealth ? voice.modelHealth() : { ok: false, reason: 'unknown', sizeBytes: 0 }
+      _writeVoiceInitLog(detail, health)
+      console.error('[voice] init failed: stage=' + detail.stage + ' msg=' + detail.message + ' hint=' + (detail.hint || ''))
+      showCharBubble(_voiceFailureBubbleText(detail.stage), { source: 'voice', mood: 'alert', duration: 4500 })
       return
     }
     // Init succeeded — unconditionally re-enable. A previous session may have
