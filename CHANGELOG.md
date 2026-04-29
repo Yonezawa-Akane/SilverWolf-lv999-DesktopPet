@@ -4,6 +4,32 @@
 
 ---
 
+## [2.2.3] — 2026-04-28
+
+### 修复 / Fixed
+
+- **docx → PDF 字体被替换成微软雅黑** —— `services/converter.js` 的 `wrapHtml` 之前硬编码了 `font-family:"Microsoft YaHei"...`，叠加 mammoth 默认丢弃 `<w:rFonts>` 信息，导致原文 Yu Mincho / Times New Roman / 其它字体一律被压成微软雅黑（pdffonts 输出仅 `MicrosoftYaHei`）。本版重写 docx 解析管线：
+  - 在 `mammoth.transformDocument` 钩子里把每个 run 的 `<w:rFonts w:ascii>` 与 `<w:sz>` 透传成 inline `<span style="font-family:…;font-size:…pt">`；run 渲染完用一次后处理把 ASCII sentinel 还原成真正的 span。
+  - 字体回退链改为 Latin 衬线（Times New Roman / Cambria / Georgia）在前、CJK 衬线（Yu Mincho / SimSun / Source Han Serif / Noto Serif CJK）在后，浏览器按字符级 fallback 取字形。
+  - 不再硬编码雅黑（无衬线）—— 那是上一版"明朝体被偷换成黑体"的根因。
+- **docx → PDF 字号 / 行高塌陷** —— 之前所有正文压成 12pt × 1.6，所有 `<h1>` 都按浏览器默认 2em 渲染，多个 Heading1 段落即使原文 sz 不同也长一样大。本版双重恢复：
+  - run 级 `<w:sz>` 透传到 inline span（覆盖式优先级最高）
+  - h1/h2/h3/h4 在 wrapHtml 设了 16/14/13/12pt 的 Word 风格默认，无 run 覆盖时也能保住层次
+- **docx → PDF 页面尺寸被强制 A4** —— 新增 `extractDocxMeta(src)`：用 jszip 直接读 `word/document.xml` 的 `<w:sectPr><w:pgSz>` 与 `<w:pgMar>`，twip → inch 精确换算（1 twip = 1/1440 inch，Letter / Legal 等英制尺寸完全 round-trip）。`wrapHtml` 接受 `opts.page` 参数发动态 `@page { size:Win Hin; margin:t r b l in }`，配合 `main.js` 的 `preferCSSPageSize:true` 让源文档页面尺寸/边距直通 PDF。源 docx 没有 sectPr 时回退 A4 / 2.54cm。
+- **docx → HTML 同步受益** —— `docxToHtml` 走同一管线，浏览器预览也能拿到字体/字号/页面信息（`@media screen` 段保留居中预览样式）。`docxToTxt` / `docxToMd` 维持现状不动（这俩本来就该丢字体信息）。
+
+### 改动 / Changed
+
+- **新增依赖 `jszip ^3.10.1`** —— 用来直接解 docx 的 OOXML zip 容器读 sectPr。mammoth 不暴露页面尺寸 API，所以这步必须自己解。
+- **`services/converter.js` `wrapHtml(body)` → `wrapHtml(body, opts)`** —— 第二参数 `opts.page` 可选；不传时回退 A4 / 2.54cm，向下兼容所有非 docx 的 html→pdf / md→pdf / xlsx→pdf 路径。
+
+### 已知限制 / Known limits
+
+- 字体名只读 `<w:rFonts w:ascii>`，不读 `eastAsia / hAnsi / cs`（mammoth body-reader 限制）。中文正文若 docx 只在 `eastAsia` 指定字体（如 Yu Mincho / 思源宋体），run 级 `font-family` 会拿不到，仍交给 wrapHtml 的 CJK 衬线 fallback 链兜底。
+- 未打包字体二进制 —— PDF 端能不能落到目标字形仍取决于运行机器是否装了对应字体；缺字时由浏览器 fallback 链按字形可用性逐级降级。
+
+---
+
 ## [2.2.2] — 2026-04-28
 
 ### 新增 / Added

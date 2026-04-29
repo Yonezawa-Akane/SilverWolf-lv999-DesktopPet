@@ -14,6 +14,7 @@ const TurndownService = require('turndown')
 const htmlToDocx = require('html-to-docx')
 const pdfParse = require('pdf-parse')
 const XLSX = require('xlsx')
+const JSZip = require('jszip')
 
 // `marked` v18 is pure ESM — load it lazily via dynamic import and cache the result.
 // Calling getMarked() returns the same `parse` function on subsequent calls.
@@ -77,9 +78,112 @@ async function imgToPdf(src, out) {
 
 // -- Document handlers --
 
+// docx → HTML with run-level font/size preserved as inline <span>.
+// Mammoth strips <w:rFonts>/<w:sz> by default; we restore them by:
+//   1. transformDocument: wrap each run's children with ASCII sentinel markers
+//      carrying base64-encoded inline styles
+//   2. post-process the emitted HTML: replace the sentinel pairs with <span style="…">
+// Falls back to a vanilla mammoth.convertToHtml if anything blows up — we'd rather
+// produce a "wrong-font" PDF than no PDF at all.
+async function convertDocxWithStyles(src) {
+  // Per-call random sentinel makes accidental collision with user content astronomically unlikely.
+  const tag = Math.random().toString(36).slice(2, 10)
+  const OPEN_HEAD = `__SWFNT_${tag}_O_`
+  const OPEN_TAIL = `__`
+  const CLOSE = `__SWFNT_${tag}_C__`
+
+  const transformRun = run => {
+    const styles = []
+    if (run.font) {
+      // run.font comes from <w:rFonts w:ascii="…">; quote-strip to keep CSS valid.
+      styles.push(`font-family:"${String(run.font).replace(/"/g, '')}",serif`)
+    }
+    if (run.fontSize) {
+      // mammoth body-reader.js already divides w:sz by 2 → fontSize is in pt, NOT half-points.
+      styles.push(`font-size:${run.fontSize}pt`)
+    }
+    if (styles.length === 0) return run
+    const b64 = Buffer.from(styles.join(';'), 'utf8').toString('base64')
+    const open = { type: 'text', value: `${OPEN_HEAD}${b64}${OPEN_TAIL}` }
+    const close = { type: 'text', value: CLOSE }
+    return Object.assign({}, run, { children: [open].concat(run.children || []).concat([close]) })
+  }
+
+  let html
+  try {
+    const r = await mammoth.convertToHtml(
+      { path: src },
+      { transformDocument: mammoth.transforms.run(transformRun) }
+    )
+    html = r.value
+    // Decode markers → inline spans. Markers only contain [A-Za-z0-9+/=] and our sentinel
+    // chars, all of which survive mammoth's escapeHtmlText (only &, <, > are escaped).
+    const reOpen = new RegExp(
+      OPEN_HEAD.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
+      '([A-Za-z0-9+/=]*)' +
+      OPEN_TAIL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      'g'
+    )
+    const reClose = new RegExp(CLOSE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')
+    html = html.replace(reOpen, (_, b64) => {
+      const style = Buffer.from(b64, 'base64').toString('utf8')
+      return `<span style="${style.replace(/"/g, '&quot;')}">`
+    }).replace(reClose, '</span>')
+  } catch (err) {
+    // Fallback: plain mammoth without style preservation (better than no output)
+    const r = await mammoth.convertToHtml({ path: src })
+    html = r.value
+  }
+  return html
+}
+
+// Read <w:pgSz>/<w:pgMar> out of word/document.xml so we can mirror the source page
+// in @page CSS instead of forcing A4. twip → inch is exact (1 twip = 1/1440 inch),
+// avoiding decimal drift on round Letter/Legal dimensions.
+async function extractDocxMeta(srcPath) {
+  try {
+    const buf = fs.readFileSync(srcPath)
+    const zip = await JSZip.loadAsync(buf)
+    const docXml = zip.file('word/document.xml')
+    if (!docXml) return null
+    const xml = await docXml.async('string')
+    const sectM = xml.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/)
+    if (!sectM) return null
+    const sect = sectM[0]
+    const szM = sect.match(/<w:pgSz\b[^>]*\/?>/)
+    const marM = sect.match(/<w:pgMar\b[^>]*\/?>/)
+    const sz = szM ? szM[0] : null
+    const mar = marM ? marM[0] : null
+    const attr = (s, k) => {
+      if (!s) return null
+      const m = s.match(new RegExp(`w:${k}="(\\d+)"`))
+      return m ? parseInt(m[1], 10) : null
+    }
+    const twipToIn = t => t == null ? null : +(t / 1440).toFixed(4)
+    const w = twipToIn(attr(sz, 'w'))
+    const h = twipToIn(attr(sz, 'h'))
+    if (!w || !h) return null
+    return {
+      page: {
+        widthIn: w,
+        heightIn: h,
+        marginIn: {
+          top:    twipToIn(attr(mar, 'top'))    ?? 1,
+          right:  twipToIn(attr(mar, 'right'))  ?? 1,
+          bottom: twipToIn(attr(mar, 'bottom')) ?? 1,
+          left:   twipToIn(attr(mar, 'left'))   ?? 1
+        }
+      }
+    }
+  } catch {
+    return null
+  }
+}
+
 async function docxToHtml(src, out) {
-  const r = await mammoth.convertToHtml({ path: src })
-  fs.writeFileSync(out, wrapHtml(r.value), 'utf8')
+  const html = await convertDocxWithStyles(src)
+  const meta = await extractDocxMeta(src)
+  fs.writeFileSync(out, wrapHtml(html, { page: meta && meta.page }), 'utf8')
 }
 
 async function docxToMd(src, out) {
@@ -95,8 +199,9 @@ async function docxToTxt(src, out) {
 
 async function docxToPdf(src, out, ctx) {
   if (!ctx || !ctx.htmlToPdf) throw new Error('需要 htmlToPdf 能力')
-  const r = await mammoth.convertToHtml({ path: src })
-  await ctx.htmlToPdf(wrapHtml(r.value), out)
+  const html = await convertDocxWithStyles(src)
+  const meta = await extractDocxMeta(src)
+  await ctx.htmlToPdf(wrapHtml(html, { page: meta && meta.page }), out)
 }
 
 async function mdToHtml(src, out) {
@@ -459,10 +564,30 @@ async function convert(srcPath, target, ctx) {
 
 // -- Helpers --
 
-function wrapHtml(body) {
+function wrapHtml(body, opts) {
+  // Page size: opts.page (from extractDocxMeta) wins; else fall back to A4.
+  // main.js htmlToPdf passes preferCSSPageSize:true so this @page actually drives PDF dims.
+  let pageRule = '@page{size:A4;margin:2.54cm;}'
+  if (opts && opts.page && opts.page.widthIn && opts.page.heightIn) {
+    const p = opts.page
+    const m = p.marginIn || { top: 1, right: 1, bottom: 1, left: 1 }
+    pageRule = `@page{size:${p.widthIn}in ${p.heightIn}in;margin:${m.top}in ${m.right}in ${m.bottom}in ${m.left}in;}`
+  }
+  // Font chain: Latin serifs FIRST (Times wins for ASCII when present), CJK serifs after.
+  // Browsers per-glyph fall through, so Latin chars prefer Times/Cambria and CJK chars
+  // prefer Yu Mincho/SimSun/etc. Run-level <span style="font-family:…"> from
+  // convertDocxWithStyles overrides this when the docx specifies a font.
+  // Heading sizes match common Word defaults (Heading1=16pt, …) so layout doesn't flatten
+  // to browser-default 2em on docs whose Heading runs lack their own w:sz override.
+  // Inline run-level <span style="font-size:…"> still wins over these (specificity).
   return `<!doctype html><html><head><meta charset="utf-8"><style>
-body{font-family:"Microsoft YaHei","PingFang SC","Helvetica Neue",Arial,sans-serif;font-size:12pt;line-height:1.6;color:#222;padding:24px;max-width:800px;margin:0 auto;}
-h1,h2,h3,h4{margin:1em 0 .4em;}
+${pageRule}
+body{font-family:"Times New Roman","Cambria","Georgia","Yu Mincho","MS Mincho","Songti SC","SimSun","宋体","Source Han Serif SC","Noto Serif CJK SC",serif;font-size:12pt;line-height:1.5;color:#222;}
+@media screen{body{max-width:800px;margin:0 auto;padding:24px;}}
+h1{font-size:16pt;margin:1em 0 .4em;}
+h2{font-size:14pt;margin:1em 0 .4em;}
+h3{font-size:13pt;margin:1em 0 .4em;}
+h4{font-size:12pt;margin:1em 0 .4em;}
 p{margin:.5em 0;}
 pre,code{font-family:Consolas,"Courier New",monospace;background:#f5f5f7;padding:2px 4px;border-radius:3px;}
 pre{padding:10px;overflow-x:auto;white-space:pre-wrap;}
