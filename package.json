@@ -1,6 +1,6 @@
 {
   "name": "silver-wolf-pet",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "Silver Wolf Shimeji Desktop Pet",
   "main": "main.js",
   "author": "Fan Project",
@@ -15,6 +15,7 @@
   "dependencies": {
     "html-to-docx": "^1.8.0",
     "jimp": "^0.22.12",
+    "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
     "marked": "^18.0.2",
     "pdf-lib": "^1.17.1",

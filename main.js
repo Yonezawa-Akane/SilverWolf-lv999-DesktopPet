@@ -1611,7 +1611,9 @@ function buildConverterCtx() {
       })
       try {
         await w.loadFile(tmpHtml)
-        const buf = await w.webContents.printToPDF({ printBackground: true, pageSize: 'A4' })
+        // preferCSSPageSize:true → 让 wrapHtml 里的 @page { size; margin } 生效。
+        // pageSize:'A4' 保留作为 @page 缺失时的 fallback（preferCSSPageSize 命中时会被忽略）。
+        const buf = await w.webContents.printToPDF({ printBackground: true, pageSize: 'A4', preferCSSPageSize: true })
         fs.writeFileSync(outPath, buf)
       } finally {
         try { w.destroy() } catch {}
